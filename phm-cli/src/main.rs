@@ -67,15 +67,19 @@ impl EhalSerial {
                 let mut window = &buf[..];
 
                 'cobs: while !window.is_empty() {
-                    window = match self.cobs_buf.feed::<phm_icd::ToPc>(&window) {
+                    window = match self.cobs_buf.feed::<Result<phm_icd::ToPc, ()>>(&window) {
                         FeedResult::Consumed => break 'cobs,
                         FeedResult::OverFull(new_wind) => new_wind,
                         FeedResult::DeserError(new_wind) => new_wind,
                         FeedResult::Success { data, remaining } => {
                             // Do something with `data: MyData` here.
+                            if let Ok(data) = data {
+                                println!("got: {:?}", data);
+                                responses.push(data);
+                            } else {
+                                eprintln!("I2C failed!");
+                            }
 
-                            println!("got: {:?}", data);
-                            responses.push(data);
 
                             remaining
                         }
