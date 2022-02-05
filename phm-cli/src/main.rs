@@ -1,4 +1,7 @@
 use std::{time::{Duration, Instant}, io::ErrorKind};
+use phm_icd::ToMcu;
+use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
+
 
 fn main() -> Result<(), ()> {
     println!("Hello, world!");
@@ -31,17 +34,40 @@ fn main() -> Result<(), ()> {
     let mut last_send = Instant::now();
 
     let mut buf = [0u8; 1024];
+    let mut cobs_buf: CobsAccumulator<512> = CobsAccumulator::new();
+
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
-            port.write_all(b"hello, usb!").map_err(drop)?;
+
+            let msg = ToMcu::Ping;
+            let ser_msg = to_stdvec_cobs(&msg).map_err(drop)?;
+
+
+            port.write_all(&ser_msg).map_err(drop)?;
             last_send = Instant::now();
         }
 
         // read from stdin and push it to the decoder
         match port.read(&mut buf) {
             Ok(n) if n > 0 => {
-                println!("Got: {}", std::str::from_utf8(&buf[..n]).map_err(drop)?);
+                let buf = &buf[..n];
+                let mut window = &buf[..];
+
+                'cobs: while !window.is_empty() {
+                    window = match cobs_buf.feed::<phm_icd::ToPc>(&window) {
+                        FeedResult::Consumed => break 'cobs,
+                        FeedResult::OverFull(new_wind) => new_wind,
+                        FeedResult::DeserError(new_wind) => new_wind,
+                        FeedResult::Success { data, remaining } => {
+                            // Do something with `data: MyData` here.
+
+                            println!("got: {:?}", data);
+
+                            remaining
+                        }
+                    };
+                }
             }
             Ok(_) => {},
             Err(e) if e.kind() == ErrorKind::TimedOut => {},

@@ -25,11 +25,16 @@ postcard = "0.7.2"
 embedded-hal = "0.2.6"
 groundhog = "0.2.5"
 groundhog-nrf52 = "0.5.0"
+heapless = "0.7.10"
 
 [dependencies.cortex-m-rtic]
 version = "0.5.8"
 default-features = false
 features = ["cortex-m-7"]
+
+[dependencies.phm-icd]
+path = "../phm-icd"
+features = ["use-defmt"]
 
 [dev-dependencies]
 defmt-test = "0.3.0"

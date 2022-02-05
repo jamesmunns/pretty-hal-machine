@@ -7,6 +7,8 @@ use nrf52_phm as _; // global logger + panicking-behavior + memory layout
 
     // monotonic = groundhog_nrf52::GlobalRollingTimer
 use defmt::unwrap;
+use phm_icd::{ToMcu, ToPc};
+use postcard::{CobsAccumulator, FeedResult};
 use usb_device::{class_prelude::UsbBusAllocator, device::{UsbDeviceBuilder, UsbVidPid}};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use groundhog_nrf52::GlobalRollingTimer;
@@ -78,6 +80,7 @@ const APP: () = {
 
         let mut buf = [0u8; 128];
 
+        let mut cobs_buf: CobsAccumulator<512> = CobsAccumulator::new();
 
 
         // usb_serial.write(msg.deref())
@@ -93,8 +96,35 @@ const APP: () = {
                 loop {
                     match usb_serial.read(&mut buf) {
                         Ok(sz) if sz > 0 => {
-                            usb_serial.write(&buf[..sz]).ok();
-                            defmt::println!("Got {=usize} bytes!", sz);
+                            let buf = &buf[..sz];
+                            let mut window = &buf[..];
+
+                            'cobs: while !window.is_empty() {
+                                window = match cobs_buf.feed::<phm_icd::ToMcu>(&window) {
+                                    FeedResult::Consumed => break 'cobs,
+                                    FeedResult::OverFull(new_wind) => new_wind,
+                                    FeedResult::DeserError(new_wind) => new_wind,
+                                    FeedResult::Success { data, remaining } => {
+
+                                        defmt::println!("got: {:?}", data);
+
+                                        match data {
+                                            ToMcu::I2c(msg) => defmt::println!("i2c: {:?}", msg),
+                                            ToMcu::Ping => {
+                                                let msg = ToPc::Pong;
+                                                let ser_msg: heapless::Vec<u8, 128> = unwrap!(
+                                                    postcard::to_vec_cobs(&msg)
+                                                        .map_err(drop)
+                                                );
+
+                                                usb_serial.write(&ser_msg).ok();
+                                            }
+                                        }
+
+                                        remaining
+                                    }
+                                };
+                            }
                         },
                         Ok(_) | Err(usb_device::UsbError::WouldBlock) => break,
                         Err(_e) => defmt::panic!("Usb Error!"),
