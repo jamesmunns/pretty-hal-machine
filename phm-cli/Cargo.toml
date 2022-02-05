@@ -1,0 +1,15 @@
+[package]
+name = "phm-cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embedded-hal = "0.2.6"
+postcard = "0.7.3"
+serde = "1.0.136"
+serialport = "4.0.1"
+
+[dependencies.phm-icd]
+path = "../phm-icd"

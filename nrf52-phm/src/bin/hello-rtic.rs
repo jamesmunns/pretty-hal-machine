@@ -83,8 +83,6 @@ const APP: () = {
         // usb_serial.write(msg.deref())
 
 
-
-
         let timer = GlobalRollingTimer::default();
 
         loop {
@@ -95,6 +93,7 @@ const APP: () = {
                 loop {
                     match usb_serial.read(&mut buf) {
                         Ok(sz) if sz > 0 => {
+                            usb_serial.write(&buf[..sz]).ok();
                             defmt::println!("Got {=usize} bytes!", sz);
                         },
                         Ok(_) | Err(usb_device::UsbError::WouldBlock) => break,
