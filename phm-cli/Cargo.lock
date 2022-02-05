@@ -253,6 +253,7 @@ name = "phm-cli"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
+ "heapless",
  "phm-icd",
  "postcard",
  "serde",

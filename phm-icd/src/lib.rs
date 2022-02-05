@@ -15,12 +15,15 @@ pub enum ToMcu {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToMcuI2c {
     Write {
+        addr: u8,
         output: Vec<u8, 64>,
     },
     Read {
+        addr: u8,
         to_read: u32,
     },
     WriteThenRead {
+        addr: u8,
         output: Vec<u8, 64>,
         to_read: u32,
     }
@@ -36,10 +39,15 @@ pub enum ToPc {
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToPcI2c {
+    WriteComplete {
+        addr: u8,
+    },
     Read {
+        addr: u8,
         data_read: Vec<u8, 64>,
     },
     WriteThenRead {
+        addr: u8,
         data_read: Vec<u8, 64>,
     }
 }

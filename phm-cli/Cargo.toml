@@ -9,6 +9,7 @@ edition = "2021"
 embedded-hal = "0.2.6"
 serde = "1.0.136"
 serialport = "4.0.1"
+heapless = "0.7.10"
 
 [dependencies.postcard]
 version = "0.7.3"

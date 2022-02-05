@@ -7,7 +7,7 @@ use nrf52_phm as _; // global logger + panicking-behavior + memory layout
 
     // monotonic = groundhog_nrf52::GlobalRollingTimer
 use defmt::unwrap;
-use phm_icd::{ToMcu, ToPc};
+use phm_icd::{ToMcu, ToPc, ToPcI2c, ToMcuI2c};
 use postcard::{CobsAccumulator, FeedResult};
 use usb_device::{class_prelude::UsbBusAllocator, device::{UsbDeviceBuilder, UsbVidPid}};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
@@ -109,7 +109,21 @@ const APP: () = {
                                         defmt::println!("got: {:?}", data);
 
                                         match data {
-                                            ToMcu::I2c(msg) => defmt::println!("i2c: {:?}", msg),
+                                            ToMcu::I2c(ToMcuI2c::Write { addr, output: _output }) => {
+                                                defmt::println!("pretending to do an I2C...");
+                                                let msg = ToPc::I2c(ToPcI2c::WriteComplete {
+                                                    addr: addr,
+                                                });
+                                                let ser_msg: heapless::Vec<u8, 128> = unwrap!(
+                                                    postcard::to_vec_cobs(&msg)
+                                                        .map_err(drop)
+                                                );
+
+                                                usb_serial.write(&ser_msg).ok();
+                                            },
+                                            ToMcu::I2c(msg) => {
+                                                defmt::println!("unhandled I2C! {:?}", msg);
+                                            }
                                             ToMcu::Ping => {
                                                 let msg = ToPc::Pong;
                                                 let ser_msg: heapless::Vec<u8, 128> = unwrap!(
