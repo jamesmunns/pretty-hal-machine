@@ -13,7 +13,6 @@ fn main() -> Result<(), ()> {
     let mut dport = None;
 
     for port in serialport::available_ports().unwrap() {
-        println!("{:?}", port);
         if let serialport::SerialPortType::UsbPort(serialport::UsbPortInfo {
             serial_number: Some(sn),
             ..
