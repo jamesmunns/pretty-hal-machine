@@ -27,4 +27,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
+          args: --manifest-path ./host/phm/Cargo.toml --target=${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
           args: --manifest-path ./host/phm-cli/Cargo.toml --target=${{ matrix.target }}
