@@ -1,9 +1,11 @@
-use std::{time::{Duration, Instant}, io::ErrorKind};
 use embedded_hal::prelude::_embedded_hal_blocking_i2c_Write;
-use phm_icd::{ToMcu, ToPc, ToMcuI2c, ToPcI2c};
+use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
-
+use std::{
+    io::ErrorKind,
+    time::{Duration, Instant},
+};
 
 fn main() -> Result<(), ()> {
     println!("Hello, world!");
@@ -11,7 +13,11 @@ fn main() -> Result<(), ()> {
     let mut dport = None;
 
     for port in serialport::available_ports().unwrap() {
-        if let serialport::SerialPortType::UsbPort(serialport::UsbPortInfo { serial_number: Some(sn), .. }) = &port.port_type {
+        if let serialport::SerialPortType::UsbPort(serialport::UsbPortInfo {
+            serial_number: Some(sn),
+            ..
+        }) = &port.port_type
+        {
             if sn.as_str() == "ajm123" {
                 dport = Some(port.clone());
                 break;
@@ -52,7 +58,6 @@ fn main() -> Result<(), ()> {
 struct EhalSerial {
     port: Box<dyn SerialPort>,
     cobs_buf: CobsAccumulator<512>,
-
 }
 
 impl EhalSerial {
@@ -80,14 +85,13 @@ impl EhalSerial {
                                 eprintln!("I2C failed!");
                             }
 
-
                             remaining
                         }
                     };
                 }
             }
-            Ok(_) => {},
-            Err(e) if e.kind() == ErrorKind::TimedOut => {},
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::TimedOut => {}
             Err(e) => {
                 panic!("ERR: {:?}", e);
             }

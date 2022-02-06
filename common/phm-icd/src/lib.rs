@@ -1,8 +1,7 @@
 #![no_std]
 
-use serde::{Serialize, Deserialize};
 use heapless::Vec;
-
+use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +25,7 @@ pub enum ToMcuI2c {
         addr: u8,
         output: Vec<u8, 64>,
         to_read: u32,
-    }
+    },
 }
 
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
@@ -39,15 +38,7 @@ pub enum ToPc {
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToPcI2c {
-    WriteComplete {
-        addr: u8,
-    },
-    Read {
-        addr: u8,
-        data_read: Vec<u8, 64>,
-    },
-    WriteThenRead {
-        addr: u8,
-        data_read: Vec<u8, 64>,
-    }
+    WriteComplete { addr: u8 },
+    Read { addr: u8, data_read: Vec<u8, 64> },
+    WriteThenRead { addr: u8, data_read: Vec<u8, 64> },
 }

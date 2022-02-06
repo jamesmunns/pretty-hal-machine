@@ -1,0 +1,30 @@
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+name: Embedded Builds
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - features: ""
+            target: thumbv7em-none-eabihf
+            rust: stable
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+      - run: rustup target add thumbv7em-none-eabihf
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path ./firmware/nrf52-phm/Cargo.toml --no-default-features --features=${{ matrix.feature }} --target=${{ matrix.target }}
