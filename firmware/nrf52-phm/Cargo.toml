@@ -1,5 +1,5 @@
 [package]
-authors = ["James Munns <james@onevariable.com>"]
+authors = ["James Munns <james@onevariable.com>", "Henrik Alsér <henrik.alser@me.com>"]
 name = "nrf52-phm"
 edition = "2018"
 version = "0.1.0"
