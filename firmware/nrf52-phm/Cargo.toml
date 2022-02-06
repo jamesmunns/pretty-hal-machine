@@ -1,5 +1,5 @@
 [package]
-authors = ["James Munns <james@onevariable.com>"]
+authors = ["James Munns <james@onevariable.com>", "Henrik Alsér <henrik.alser@me.com>"]
 name = "nrf52-phm"
 edition = "2018"
 version = "0.1.0"
@@ -15,6 +15,9 @@ harness = false
 [dependencies]
 cortex-m = "0.7.3"
 cortex-m-rt = "0.7.0"
+cortex-m-rtic = "1.0.0"
+rtic-monotonic = "1.0.0"
+fugit = "0.3.3"
 defmt = "0.3.0"
 defmt-rtt = "0.3.0"
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
@@ -29,11 +32,6 @@ groundhog-nrf52 = "0.5.0"
 [dependencies.heapless]
 version = "0.7.10"
 features = ["serde"]
-
-[dependencies.cortex-m-rtic]
-version = "0.5.8"
-default-features = false
-features = ["cortex-m-7"]
 
 [dependencies.phm-icd]
 path = "../../common/phm-icd"
