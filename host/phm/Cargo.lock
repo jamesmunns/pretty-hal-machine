@@ -249,8 +249,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "phm-cli"
-version = "0.1.0"
+name = "phm"
+version = "0.0.1"
 dependencies = [
  "embedded-hal",
  "heapless",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "phm-icd"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "heapless",
  "serde",

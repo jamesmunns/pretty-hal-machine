@@ -1,67 +1,67 @@
-use embedded_hal::prelude::_embedded_hal_blocking_i2c_Write;
 use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
 use std::{
-    io::ErrorKind,
+    io::{ErrorKind, self},
     time::{Duration, Instant},
 };
 
-fn main() -> Result<(), ()> {
-    println!("Hello, world!");
-
-    let mut dport = None;
-
-    for port in serialport::available_ports().unwrap() {
-        if let serialport::SerialPortType::UsbPort(serialport::UsbPortInfo {
-            serial_number: Some(sn),
-            ..
-        }) = &port.port_type
-        {
-            if sn.as_str() == "ajm123" {
-                dport = Some(port.clone());
-                break;
-            }
-        }
-    }
-
-    let dport = if let Some(port) = dport {
-        port
-    } else {
-        eprintln!();
-        eprintln!("Error: Didn't find a `powerbus mini` device! Is the firmware running?");
-        eprintln!();
-        return Ok(());
-    };
-
-    let port = serialport::new(dport.port_name, 115200)
-        .timeout(Duration::from_millis(5))
-        .open()
-        .map_err(drop)?;
-
-    let mut ehal = EhalSerial {
-        port,
-        cobs_buf: CobsAccumulator::new(),
-    };
-
-    let mut last_send = Instant::now();
-
-    loop {
-        if last_send.elapsed() >= Duration::from_secs(1) {
-            println!("Sending command!");
-            ehal.write(0x42, &[1, 2, 3, 4]).unwrap();
-            last_send = Instant::now();
-        }
-    }
-}
-
-struct EhalSerial {
+/// The Pretty HAL Machine
+///
+/// This wraps a serial port connection to an embedded machine,
+/// and implements various [embedded-hal](embedded-hal) traits.
+pub struct Machine {
     port: Box<dyn SerialPort>,
     cobs_buf: CobsAccumulator<512>,
+    command_timeout: Duration,
 }
 
-impl EhalSerial {
-    fn poll(&mut self) -> Vec<ToPc> {
+/// The main Error type
+#[derive(Debug)]
+pub enum Error {
+    PhmSerial(io::Error),
+    Postcard(postcard::Error),
+    Timeout(Duration),
+
+    // TODO: This probably needs some more context/nuance...
+    ResponseError,
+    Unknown,
+}
+
+impl From<postcard::Error> for Error {
+    fn from(err: postcard::Error) -> Self {
+        Error::Postcard(err)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::PhmSerial(err)
+    }
+}
+
+impl Machine {
+    pub fn from_port(port: Box<dyn SerialPort>) -> Result<Self, Error> {
+        // TODO: some kind of sanity checking? Check version, protocol,
+        // signs of life, anything?
+        Ok(Self {
+            port,
+            cobs_buf: CobsAccumulator::new(),
+            command_timeout: Duration::from_secs(3),
+        })
+    }
+
+    /// Set the timeout for a full command to complete.
+    ///
+    /// This is not a single message timeout, but rather the timeout
+    /// for a whole command (e.g. an I2C write) to execute. This is currently
+    /// only checked/set host side, so endless loops on the embedded side are
+    /// still possible.
+    pub fn set_command_timeout(&mut self, timeout: Duration) {
+        self.command_timeout = timeout;
+    }
+
+    fn poll(&mut self) -> Result<Vec<ToPc>, Error> {
         let mut responses = vec![];
         let mut buf = [0u8; 1024];
 
@@ -79,10 +79,9 @@ impl EhalSerial {
                         FeedResult::Success { data, remaining } => {
                             // Do something with `data: MyData` here.
                             if let Ok(data) = data {
-                                println!("got: {:?}", data);
                                 responses.push(data);
                             } else {
-                                eprintln!("I2C failed!");
+                                return Err(Error::ResponseError);
                             }
 
                             remaining
@@ -93,17 +92,17 @@ impl EhalSerial {
             Ok(_) => {}
             Err(e) if e.kind() == ErrorKind::TimedOut => {}
             Err(e) => {
-                panic!("ERR: {:?}", e);
+                return Err(Error::PhmSerial(e));
             }
         }
-        responses
+        Ok(responses)
     }
 }
 
-impl embedded_hal::blocking::i2c::Write for EhalSerial {
-    type Error = ();
+impl embedded_hal::blocking::i2c::Write for Machine {
+    type Error = Error;
 
-    fn write(&mut self, address: u8, bytes: &[u8]) -> Result<(), Self::Error> {
+    fn write(&mut self, address: u8, bytes: &[u8]) -> Result<(), Error> {
         let mut bytes_hvec: heapless::Vec<u8, 64> = heapless::Vec::new();
 
         bytes.iter().for_each(|b| {
@@ -113,18 +112,23 @@ impl embedded_hal::blocking::i2c::Write for EhalSerial {
             addr: address,
             output: bytes_hvec,
         });
-        let ser_msg = to_stdvec_cobs(&msg).map_err(drop)?;
-        self.port.write_all(&ser_msg).map_err(drop)?;
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
 
-        loop {
-            for msg in self.poll() {
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
                 if let ToPc::I2c(ToPcI2c::WriteComplete { .. }) = msg {
                     return Ok(());
-                } else {
-                    eprintln!("Unexpected msg (ignoring)! {:?}", msg);
                 }
             }
-            std::thread::sleep(Duration::from_millis(20));
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
         }
+
+        Err(Error::Timeout(self.command_timeout))
     }
 }
