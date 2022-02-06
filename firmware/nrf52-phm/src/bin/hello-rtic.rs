@@ -2,23 +2,26 @@
 #![no_std]
 
 use cortex_m::singleton;
+use embedded_hal::blocking::i2c::Write;
 use nrf52840_hal::{
-    Clocks,
-    usbd::{UsbPeripheral, Usbd},
     clocks::{ExternalOscillator, Internal, LfOscStopped},
-    twim::{Twim, Pins as TwimPins, Frequency},
-    gpio::{p1::Parts as P1Parts},
+    gpio::p1::Parts as P1Parts,
     pac::TWIM0,
+    twim::{Frequency, Pins as TwimPins, Twim},
+    usbd::{UsbPeripheral, Usbd},
+    Clocks,
 };
 use nrf52_phm as _; // global logger + panicking-behavior + memory layout
-use embedded_hal::blocking::i2c::Write;
 
 use defmt::unwrap;
-use phm_icd::{ToMcu, ToPc, ToPcI2c, ToMcuI2c};
-use postcard::{CobsAccumulator, FeedResult, to_vec_cobs};
-use usb_device::{class_prelude::UsbBusAllocator, device::{UsbDeviceBuilder, UsbVidPid, UsbDevice}};
+use heapless::spsc::{Consumer, Producer, Queue};
+use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
+use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
+use usb_device::{
+    class_prelude::UsbBusAllocator,
+    device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
+};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
-use heapless::spsc::{Queue, Producer, Consumer};
 
 #[rtic::app(
     device = nrf52840_hal::pac,
@@ -49,7 +52,8 @@ const APP: () = {
         // Setup clocks early in the process. We need this for USB later
         let clocks = Clocks::new(device.CLOCK);
         let clocks = clocks.enable_ext_hfosc();
-        let clocks = unwrap!(singleton!(: Clocks<ExternalOscillator, Internal, LfOscStopped> = clocks));
+        let clocks =
+            unwrap!(singleton!(: Clocks<ExternalOscillator, Internal, LfOscStopped> = clocks));
 
         // Configure the global timer, currently using TIMER0, a 32-bit, 1MHz timer
         groundhog_nrf52::GlobalRollingTimer::init(device.TIMER0);
@@ -115,8 +119,6 @@ const APP: () = {
 
     #[task(schedule = [usb_tick], resources = [usb_serial, cobs_buf, inc_prod, out_cons, usb_dev])]
     fn usb_tick(cx: usb_tick::Context) {
-
-
         let usb_serial = cx.resources.usb_serial;
         let usb_dev = cx.resources.usb_dev;
         let cobs_buf = cx.resources.cobs_buf;
@@ -152,11 +154,10 @@ const APP: () = {
                         }
                     };
                 }
-            },
-            Ok(_) | Err(usb_device::UsbError::WouldBlock) => {},
+            }
+            Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
             Err(_e) => defmt::panic!("Usb Error!"),
         }
-
 
         // Note: tick is in microseconds
         cx.schedule.usb_tick(cx.scheduled + 1_000i32).ok();
@@ -173,18 +174,12 @@ const APP: () = {
                     ToMcu::I2c(ToMcuI2c::Write { addr, output }) => {
                         // embedded_hal::blocking::i2c::Write
                         let msg = match Write::write(i2c, addr, &output) {
-                            Ok(_) => {
-                                Ok(ToPc::I2c(ToPcI2c::WriteComplete {
-                                    addr: addr,
-                                }))
-                            }
-                            Err(_) => {
-                                Err(())
-                            }
+                            Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr: addr })),
+                            Err(_) => Err(()),
                         };
 
                         cx.resources.out_prod.enqueue(msg).ok();
-                    },
+                    }
                     ToMcu::I2c(msg) => {
                         defmt::println!("unhandled I2C! {:?}", msg);
                     }
@@ -202,5 +197,3 @@ const APP: () = {
         fn SWI0_EGU0();
     }
 };
-
-
