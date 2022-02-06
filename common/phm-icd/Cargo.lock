@@ -147,6 +147,7 @@ dependencies = [
  "atomic-polyfill",
  "defmt",
  "hash32",
+ "serde",
  "spin",
  "stable_deref_trait",
 ]

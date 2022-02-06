@@ -3,8 +3,9 @@ name = "phm-icd"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-heapless = "0.7.10"
+[dependencies.heapless]
+version = "0.7.10"
+features = ["serde"]
 
 [dependencies.defmt]
 version = "0.3.0"

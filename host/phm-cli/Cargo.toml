@@ -16,4 +16,4 @@ version = "0.7.3"
 features = ["use-std"]
 
 [dependencies.phm-icd]
-path = "../phm-icd"
+path = "../../common/phm-icd"
