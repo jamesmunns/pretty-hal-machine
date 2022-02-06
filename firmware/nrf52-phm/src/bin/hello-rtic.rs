@@ -1,7 +1,6 @@
 #![no_main]
 #![no_std]
 
-<<<<<<< HEAD
 use nrf52_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = nrf52840_hal::pac, dispatchers = [SWI0_EGU0])]
@@ -35,38 +34,6 @@ mod app {
 
     #[local]
     struct Local {
-=======
-use cortex_m::singleton;
-use embedded_hal::blocking::i2c::Write;
-use nrf52840_hal::{
-    clocks::{ExternalOscillator, Internal, LfOscStopped},
-    gpio::p1::Parts as P1Parts,
-    pac::TWIM0,
-    twim::{Frequency, Pins as TwimPins, Twim},
-    usbd::{UsbPeripheral, Usbd},
-    Clocks,
-};
-use nrf52_phm as _; // global logger + panicking-behavior + memory layout
-
-use defmt::unwrap;
-use heapless::spsc::{Consumer, Producer, Queue};
-use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
-use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
-use usb_device::{
-    class_prelude::UsbBusAllocator,
-    device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
-};
-use usbd_serial::{SerialPort, USB_CLASS_CDC};
-
-#[rtic::app(
-    device = nrf52840_hal::pac,
-    peripherals = true,
-    monotonic = groundhog_nrf52::GlobalRollingTimer,
-
-)]
-const APP: () = {
-    struct Resources {
->>>>>>> main
         inc_prod: Producer<'static, ToMcu, 8>,
         inc_cons: Consumer<'static, ToMcu, 8>,
         out_prod: Producer<'static, Result<ToPc, ()>, 8>,
@@ -145,19 +112,11 @@ const APP: () = {
 
     #[task(local = [usb_serial, inc_prod, out_cons, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
     fn usb_tick(cx: usb_tick::Context) {
-<<<<<<< HEAD
         let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
         let cobs_buf = cx.local.cobs_buf;
         let inc_prod = cx.local.inc_prod;
         let out_cons = cx.local.out_cons;
-=======
-        let usb_serial = cx.resources.usb_serial;
-        let usb_dev = cx.resources.usb_dev;
-        let cobs_buf = cx.resources.cobs_buf;
-        let inc_prod = cx.resources.inc_prod;
-        let out_cons = cx.resources.out_cons;
->>>>>>> main
 
         let mut buf = [0u8; 128];
 
@@ -193,12 +152,7 @@ const APP: () = {
             Err(_e) => defmt::panic!("Usb Error!"),
         }
 
-<<<<<<< HEAD
         usb_tick::spawn_after(1.millis()).ok();
-=======
-        // Note: tick is in microseconds
-        cx.schedule.usb_tick(cx.scheduled + 1_000i32).ok();
->>>>>>> main
     }
 
     #[idle(local = [inc_cons, out_prod, i2c])]
@@ -216,11 +170,7 @@ const APP: () = {
                             Err(_) => Err(()),
                         };
 
-<<<<<<< HEAD
                         cx.local.out_prod.enqueue(msg).ok();
-=======
-                        cx.resources.out_prod.enqueue(msg).ok();
->>>>>>> main
                     }
                     ToMcu::I2c(msg) => {
                         defmt::println!("unhandled I2C! {:?}", msg);
@@ -233,13 +183,4 @@ const APP: () = {
             }
         }
     }
-<<<<<<< HEAD
 }
-=======
-
-    // Sacrificial hardware interrupts
-    extern "C" {
-        fn SWI0_EGU0();
-    }
-};
->>>>>>> main
