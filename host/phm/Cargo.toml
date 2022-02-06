@@ -1,9 +1,16 @@
 [package]
 name = "phm"
 version = "0.0.1"
+description = "Pretty HAL Machine"
+repository = "https://github.com/jamesmunns/pretty-hal-machine"
+authors = ["James Munns <james@onevariable.com>"]
 edition = "2021"
+readme = "../../README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+categories = [
+    "embedded",
+]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 embedded-hal = "0.2.6"
