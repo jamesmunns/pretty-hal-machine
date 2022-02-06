@@ -1,5 +1,5 @@
-use std::time::{Duration, Instant};
 use phm::Machine;
+use std::time::{Duration, Instant};
 
 fn main() -> Result<(), ()> {
     println!("Hello, world!");

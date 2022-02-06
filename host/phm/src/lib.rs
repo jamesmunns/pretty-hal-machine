@@ -2,7 +2,7 @@ use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
 use std::{
-    io::{ErrorKind, self},
+    io::{self, ErrorKind},
     time::{Duration, Instant},
 };
 
