@@ -1,6 +1,8 @@
 #![no_main]
 #![no_std]
 
+pub mod monotonic;
+
 use defmt_rtt as _; // global logger
 
 use nrf52840_hal as _; // memory layout
