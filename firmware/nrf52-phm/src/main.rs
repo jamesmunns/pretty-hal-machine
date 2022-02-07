@@ -10,9 +10,10 @@ mod app {
     use heapless::spsc::Queue;
     use nrf52840_hal::{
         clocks::{ExternalOscillator, Internal, LfOscStopped},
-        gpio::p1::Parts as P1Parts,
-        pac::{TIMER0, TWIM0},
-        twim::{Frequency, Pins as TwimPins, Twim},
+        gpio::{p0::Parts as P0Parts, p1::Parts as P1Parts, Level},
+        pac::{SPIM2, TIMER0, TWIM0},
+        spim::{Frequency as SpimFreq, Pins as SpimPins, Spim, MODE_0},
+        twim::{Frequency as TwimFreq, Pins as TwimPins, Twim},
         usbd::{UsbPeripheral, Usbd},
         Clocks,
     };
@@ -38,7 +39,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, Twim<TWIM0>>,
+        worker: Worker<WorkerComms<8>, Twim<TWIM0>, Spim<SPIM2>>,
         usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
         usb_dev: UsbDevice<'static, Usbd<UsbPeripheral<'static>>>,
     }
@@ -60,16 +61,34 @@ mod app {
         // Configure the monotonic timer, currently using TIMER0, a 32-bit, 1MHz timer
         let mono = Monotonic::new(device.TIMER0);
 
-        // // Create both GPIO ports for pin-mapping
+        // Create GPIO ports for pin-mapping
+        let port0 = P0Parts::new(device.P0);
         let port1 = P1Parts::new(device.P1);
 
+        // Set up Twim
         let i2c = Twim::new(
             device.TWIM0,
             TwimPins {
                 scl: port1.p1_01.into_floating_input().degrade(),
                 sda: port1.p1_02.into_floating_input().degrade(),
             },
-            Frequency::K100,
+            TwimFreq::K100,
+        );
+
+        // Set up Spim
+        let sck = port0.p0_08.into_push_pull_output(Level::Low).degrade();
+        let mosi = port0.p0_04.into_push_pull_output(Level::Low).degrade();
+        let miso = port0.p0_06.into_floating_input().degrade();
+        let spi = Spim::new(
+            device.SPIM2,
+            SpimPins {
+                sck,
+                miso: Some(miso),
+                mosi: Some(mosi),
+            },
+            SpimFreq::M2,
+            MODE_0,
+            0,
         );
 
         // Set up USB Serial Port
@@ -96,6 +115,7 @@ mod app {
         let worker = Worker {
             io: worker_comms,
             i2c,
+            spi,
         };
 
         usb_tick::spawn().ok();

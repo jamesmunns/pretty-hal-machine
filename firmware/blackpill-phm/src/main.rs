@@ -16,20 +16,31 @@ mod app {
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use stm32f4xx_hal::{
         gpio::{
+            gpioa::{PA5, PA6, PA7},
             gpiob::{PB8, PB9},
-            Alternate, OpenDrain,
+            Alternate, OpenDrain, PushPull,
         },
         i2c::I2c,
         otg_fs::{UsbBus, UsbBusType, USB},
-        pac::I2C1,
+        pac::{I2C1, SPI1},
         prelude::*,
+        spi::{Mode, Phase, Polarity, Spi, TransferModeNormal},
     };
     use usb_device::{
         class_prelude::UsbBusAllocator,
         device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
     };
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type BlackpillI2C = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
+    type BlackpillI2c = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
+    type BlackpillSpi = Spi<
+        SPI1,
+        (
+            PA5<Alternate<PushPull, 5>>,
+            PA6<Alternate<PushPull, 5>>,
+            PA7<Alternate<PushPull, 5>>,
+        ),
+        TransferModeNormal,
+    >;
 
     #[monotonic(binds = TIM2, default = true)]
     type Monotonic = MonoTimer<stm32f4xx_hal::pac::TIM2, 1_000_000>;
@@ -40,7 +51,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, BlackpillI2C>,
+        worker: Worker<WorkerComms<8>, BlackpillI2c, BlackpillSpi>,
         usb_serial: SerialPort<'static, UsbBus<USB>>,
         usb_dev: UsbDevice<'static, UsbBus<USB>>,
     }
@@ -65,9 +76,25 @@ mod app {
         let gpioa = device.GPIOA.split();
         let gpiob = device.GPIOB.split();
 
+        // Set up I2C
         let scl = gpiob.pb8.into_alternate_open_drain();
         let sda = gpiob.pb9.into_alternate_open_drain();
         let i2c = I2c::new(device.I2C1, (scl, sda), 400.khz(), &clocks);
+
+        // Set up SPI
+        let sck = gpioa.pa5.into_alternate();
+        let miso = gpioa.pa6.into_alternate();
+        let mosi = gpioa.pa7.into_alternate();
+        let spi = Spi::new(
+            device.SPI1,
+            (sck, miso, mosi),
+            Mode {
+                polarity: Polarity::IdleLow,
+                phase: Phase::CaptureOnFirstTransition,
+            },
+            2_000.khz(),
+            &clocks,
+        );
 
         // Set up USB
         let usb = USB {
@@ -103,6 +130,7 @@ mod app {
         let worker = Worker {
             io: worker_comms,
             i2c,
+            spi,
         };
         usb_tick::spawn().ok();
         (

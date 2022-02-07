@@ -5,14 +5,15 @@
 
 #![no_std]
 
-use embedded_hal::blocking::i2c;
-use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToPc, ToPcI2c};
+use embedded_hal::blocking::{i2c, spi};
+use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToMcuSpi, ToPc, ToPcI2c, ToPcSpi};
 
 /// The worker Error type
 #[derive(Debug, defmt::Format, Eq, PartialEq)]
 pub enum Error {
     Io,
     I2c,
+    Spi,
     Internal,
 }
 
@@ -91,25 +92,29 @@ pub trait WorkerIo {
 /// This struct is intended to contain all of the shared logic between workers.
 /// It is highly generic, which should allow the logic to execute regardless of
 /// the MCU the worker is executing on.
-pub struct Worker<IO, I2C>
+pub struct Worker<IO, I2C, SPI>
 where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
+    SPI: spi::Write<u8> + spi::Transfer<u8>,
 {
     pub io: IO,
     pub i2c: I2C,
+    pub spi: SPI,
 }
 
-impl<IO, I2C> Worker<IO, I2C>
+impl<IO, I2C, SPI> Worker<IO, I2C, SPI>
 where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
+    SPI: spi::Write<u8> + spi::Transfer<u8>,
 {
     /// Process any pending messages to the worker
     pub fn step(&mut self) -> Result<(), Error> {
         while let Some(data) = self.io.receive() {
             let resp = match data {
                 ToMcu::I2c(i2c) => self.process_i2c(i2c),
+                ToMcu::Spi(spi) => self.process_spi(spi),
                 ToMcu::Ping => {
                     defmt::info!("Received Ping! Responding...");
                     Ok(ToPc::Pong)
@@ -165,6 +170,32 @@ where
                         data_read: buf_slice.iter().cloned().collect(),
                     })),
                     Err(_) => Err(Error::I2c),
+                }
+            }
+        }
+    }
+
+    fn process_spi(&mut self, spi_cmd: ToMcuSpi) -> Result<ToPc, Error> {
+        match spi_cmd {
+            ToMcuSpi::Write { output } => match spi::Write::write(&mut self.spi, &output) {
+                Ok(_) => Ok(ToPc::Spi(ToPcSpi::WriteComplete)),
+                Err(_) => Err(Error::Spi),
+            },
+
+            ToMcuSpi::Transfer { output } => {
+                let mut buf = [0u8; 64];
+
+                if output.len() > buf.len() {
+                    return Err(Error::Spi);
+                }
+                let buf_slice = &mut buf[..output.len()];
+                buf_slice.copy_from_slice(&output);
+
+                match spi::Transfer::transfer(&mut self.spi, buf_slice) {
+                    Ok(_) => Ok(ToPc::Spi(ToPcSpi::Transfer {
+                        data_read: buf_slice.iter().cloned().collect(),
+                    })),
+                    Err(_) => Err(Error::Spi),
                 }
             }
         }

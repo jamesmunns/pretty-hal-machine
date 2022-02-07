@@ -22,9 +22,7 @@ fn main() -> Result<(), ()> {
     let dport = if let Some(port) = dport {
         port
     } else {
-        eprintln!();
-        eprintln!("Error: Didn't find a `powerbus mini` device! Is the firmware running?");
-        eprintln!();
+        eprintln!("Error: No `Pretty hal machine` connected!");
         return Ok(());
     };
 
@@ -39,8 +37,13 @@ fn main() -> Result<(), ()> {
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
-            println!("Sending command!");
-            embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
+            // println!("Sending I2C command!");
+            // embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
+
+            let mut buf = [1, 2, 3, 4];
+            println!("Sending SPI: {:?}", buf);
+            embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
+            println!("Received SPI: {:?}", buf);
             last_send = Instant::now();
         }
     }

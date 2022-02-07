@@ -1,4 +1,4 @@
-use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
+use phm_icd::{ToMcu, ToMcuI2c, ToMcuSpi, ToPc, ToPcI2c, ToPcSpi};
 use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
 use std::{
@@ -201,6 +201,67 @@ impl embedded_hal::blocking::i2c::WriteRead for Machine {
                     } else {
                         buffer.copy_from_slice(&data_read);
                         return Ok(());
+                    }
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+impl embedded_hal::blocking::spi::Write<u8> for Machine {
+    type Error = Error;
+
+    fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        let msg = ToMcu::Spi(ToMcuSpi::Write {
+            output: bytes.iter().cloned().collect(),
+        });
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::Spi(ToPcSpi::WriteComplete) = msg {
+                    return Ok(());
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+impl embedded_hal::blocking::spi::Transfer<u8> for Machine {
+    type Error = Error;
+
+    fn transfer<'a>(&mut self, buffer: &'a mut [u8]) -> Result<&'a [u8], Self::Error> {
+        let msg = ToMcu::Spi(ToMcuSpi::Transfer {
+            output: buffer.iter().cloned().collect(),
+        });
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::Spi(ToPcSpi::Transfer { data_read }) = msg {
+                    if data_read.len() != buffer.len() {
+                        return Err(Error::ResponseError);
+                    } else {
+                        buffer.copy_from_slice(&data_read);
+                        return Ok(buffer);
                     }
                 }
             }
