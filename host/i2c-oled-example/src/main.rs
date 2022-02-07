@@ -3,8 +3,7 @@ use phm::Machine;
 use std::time::{Duration, Instant};
 
 use ssd1306::{
-    mode::TerminalMode, prelude::*, rotation::DisplayRotation, size::DisplaySize128x64,
-    I2CDisplayInterface, Ssd1306,
+    prelude::*, rotation::DisplayRotation, size::DisplaySize128x64, I2CDisplayInterface, Ssd1306,
 };
 
 fn main() -> Result<(), ()> {
@@ -46,17 +45,16 @@ fn main() -> Result<(), ()> {
     let interface = I2CDisplayInterface::new(ehal);
     let mut disp =
         Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_terminal_mode();
-    disp.init().expect("init fail");
+    disp.init().ok();
     disp.clear().ok();
     disp.write_str("Hello world!\n").ok();
-    println!("Hello, world!");
 
     let mut last_send = Instant::now();
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
             println!("Sending command!");
-            disp.write_str("Hello world!\n").ok();
+            disp.write_str("PHM!\n").ok();
             last_send = Instant::now();
         }
     }
