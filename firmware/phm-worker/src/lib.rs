@@ -3,11 +3,57 @@
 use embedded_hal::blocking::i2c;
 use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 
+
 pub enum Error {
     Io,
     I2c,
     Internal,
 }
+
+pub mod comms {
+    use heapless::spsc::{Queue, Producer, Consumer};
+    use phm_icd::{ToPc, ToMcu, Error as IcdError};
+
+    pub struct CommsLink<const N: usize> {
+        pub to_pc: &'static mut Queue<Result<ToPc, IcdError>, N>,
+        pub to_mcu: &'static mut Queue<ToMcu, N>,
+    }
+
+    impl<const N: usize> CommsLink<N> {
+        pub fn split(self) -> (WorkerComms<N>, InterfaceComms<N>) {
+            let (to_pc_prod, to_pc_cons) = self.to_pc.split();
+            let (to_mcu_prod, to_mcu_cons) = self.to_mcu.split();
+
+            (
+                WorkerComms { to_pc: to_pc_prod, to_mcu: to_mcu_cons },
+                InterfaceComms { to_pc: to_pc_cons, to_mcu: to_mcu_prod },
+            )
+        }
+    }
+
+    pub struct WorkerComms<const N: usize> {
+        pub to_pc: Producer<'static, Result<ToPc, IcdError>, N>,
+        pub to_mcu: Consumer<'static, ToMcu, N>,
+    }
+
+    impl<const N: usize> crate::WorkerIo for WorkerComms<N> {
+        type Error = ();
+
+        fn send(&mut self, msg: Result<ToPc, IcdError>) -> Result<(), Self::Error> {
+            self.to_pc.enqueue(msg).map_err(drop)
+        }
+
+        fn receive(&mut self) -> Option<ToMcu> {
+            self.to_mcu.dequeue()
+        }
+    }
+
+    pub struct InterfaceComms<const N: usize> {
+        pub to_pc: Consumer<'static, Result<ToPc, IcdError>, N>,
+        pub to_mcu: Producer<'static, ToMcu, N>,
+    }
+}
+
 
 pub trait WorkerIo {
     type Error;
@@ -21,8 +67,8 @@ where
     IO: WorkerIo,
     I2C: i2c::Write,
 {
-    io: IO,
-    i2c: I2C,
+    pub io: IO,
+    pub i2c: I2C,
 }
 
 impl<IO, I2C> Worker<IO, I2C>

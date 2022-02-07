@@ -9,6 +9,9 @@ edition = "2021"
 defmt = "0.3.0"
 embedded-hal = "0.2.6"
 
+[dependencies.heapless]
+version = "0.7.10"
+
 [dependencies.phm-icd]
 path = "../../common/phm-icd"
 features = ["use-defmt"]
