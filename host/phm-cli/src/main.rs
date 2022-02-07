@@ -40,7 +40,7 @@ fn main() -> Result<(), ()> {
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
             println!("Sending command!");
-            embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x3C, &[1, 2, 3, 4]).unwrap();
+            embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
             last_send = Instant::now();
         }
     }

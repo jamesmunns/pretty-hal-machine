@@ -37,7 +37,6 @@ fn main() -> Result<(), ()> {
         .map_err(drop)?;
 
     let ehal = Machine::from_port(port).unwrap();
-    println!("Hello, world!");
 
     // Configure the OLED display.
     let interface = I2CDisplayInterface::new(ehal);
