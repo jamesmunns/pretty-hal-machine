@@ -48,3 +48,7 @@ jobs:
         with:
           command: fmt
           args: --manifest-path ./firmware/blackpill-phm/Cargo.toml -- --check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path ./firmware/rp2040-phm/Cargo.toml -- --check
