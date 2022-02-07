@@ -134,7 +134,7 @@ mod app {
             io: worker_comms,
             i2c,
         };
-
+        usb_tick::spawn().ok();
         (
             Shared {},
             Local {
@@ -147,8 +147,8 @@ mod app {
         )
     }
 
-    #[task(binds=USBCTRL_IRQ, local = [usb_serial, interface_comms, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
-    fn on_usb(cx: on_usb::Context) {
+    #[task(local = [usb_serial, interface_comms, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
+    fn usb_tick(cx: usb_tick::Context) {
         let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
         let cobs_buf = cx.local.cobs_buf;
@@ -187,6 +187,7 @@ mod app {
             Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
             Err(_e) => defmt::panic!("Usb Error!"),
         }
+        usb_tick::spawn_after(1.millis()).ok();
     }
 
     #[idle(local = [worker])]
