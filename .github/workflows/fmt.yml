@@ -18,10 +18,14 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
+
+      # Common directory
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --manifest-path ./common/phm-icd/Cargo.toml -- --check
+
+      # Host directory
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
@@ -30,7 +34,13 @@ jobs:
         with:
           command: fmt
           args: --manifest-path ./host/phm/Cargo.toml -- --check
+
+      # Firmware directory
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --manifest-path ./firmware/nrf52-phm/Cargo.toml -- --check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path ./firmware/phm-worker/Cargo.toml -- --check

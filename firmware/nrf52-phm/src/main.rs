@@ -7,8 +7,7 @@ use nrf52_phm as _; // global logger + panicking-behavior + memory layout
 mod app {
     use cortex_m::singleton;
     use defmt::unwrap;
-    use embedded_hal::blocking::i2c::Write;
-    use heapless::spsc::{Consumer, Producer, Queue};
+    use heapless::spsc::Queue;
     use nrf52840_hal::{
         clocks::{ExternalOscillator, Internal, LfOscStopped},
         gpio::p1::Parts as P1Parts,
@@ -18,7 +17,11 @@ mod app {
         Clocks,
     };
     use nrf52_phm::monotonic::{ExtU32, MonoTimer};
-    use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
+    use phm_icd::{ToMcu, ToPc};
+    use phm_worker::{
+        comms::{CommsLink, InterfaceComms, WorkerComms},
+        Worker,
+    };
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use usb_device::{
         class_prelude::UsbBusAllocator,
@@ -34,13 +37,10 @@ mod app {
 
     #[local]
     struct Local {
-        inc_prod: Producer<'static, ToMcu, 8>,
-        inc_cons: Consumer<'static, ToMcu, 8>,
-        out_prod: Producer<'static, Result<ToPc, ()>, 8>,
-        out_cons: Consumer<'static, Result<ToPc, ()>, 8>,
+        interface_comms: InterfaceComms<8>,
+        worker: Worker<WorkerComms<8>, Twim<TWIM0>>,
         usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
         usb_dev: UsbDevice<'static, Usbd<UsbPeripheral<'static>>>,
-        i2c: Twim<TWIM0>,
     }
 
     #[init(local = [
@@ -50,10 +50,6 @@ mod app {
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let device = cx.device;
-
-        // Ensure UICR NFC pins are disabled. This is to enable use of P0.09
-        // and P0.10 which are by default mapped to NFC functionality.
-        // disable_nfc_pins(&periphs);
 
         // Setup clocks early in the process. We need this for USB later
         let clocks = Clocks::new(device.CLOCK);
@@ -65,7 +61,6 @@ mod app {
         let mono = Monotonic::new(device.TIMER0);
 
         // // Create both GPIO ports for pin-mapping
-        // let port0 = P0Parts::new(periphs.P0);
         let port1 = P1Parts::new(device.P1);
 
         let i2c = Twim::new(
@@ -83,7 +78,7 @@ mod app {
         let usb_serial = SerialPort::new(usb_bus.as_ref().unwrap());
         let usb_dev = UsbDeviceBuilder::new(usb_bus.as_ref().unwrap(), UsbVidPid(0x16c0, 0x27dd))
             .manufacturer("OVAR Labs")
-            .product("Powerbus Mini")
+            .product("PHM Worker")
             // TODO: Use some kind of unique ID. This will probably require another singleton,
             // as the storage must be static. Probably heapless::String -> singleton!()
             .serial_number("ajm123")
@@ -91,38 +86,43 @@ mod app {
             .max_packet_size_0(64) // (makes control transfers 8x faster)
             .build();
 
-        let (inc_prod, inc_cons) = cx.local.incoming.split();
-        let (out_prod, out_cons) = cx.local.outgoing.split();
+        let comms = CommsLink {
+            to_pc: cx.local.outgoing,
+            to_mcu: cx.local.incoming,
+        };
+
+        let (worker_comms, interface_comms) = comms.split();
+
+        let worker = Worker {
+            io: worker_comms,
+            i2c,
+        };
 
         usb_tick::spawn().ok();
         (
             Shared {},
             Local {
-                inc_prod,
-                inc_cons,
-                out_prod,
-                out_cons,
+                worker,
+                interface_comms,
                 usb_serial,
                 usb_dev,
-                i2c,
             },
             init::Monotonics(mono),
         )
     }
 
-    #[task(local = [usb_serial, inc_prod, out_cons, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
+    #[task(local = [usb_serial, interface_comms, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
     fn usb_tick(cx: usb_tick::Context) {
         let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
         let cobs_buf = cx.local.cobs_buf;
-        let inc_prod = cx.local.inc_prod;
-        let out_cons = cx.local.out_cons;
+        let interface_comms = cx.local.interface_comms;
 
         let mut buf = [0u8; 128];
 
         usb_dev.poll(&mut [usb_serial]);
 
-        if let Some(out) = out_cons.dequeue() {
+        if let Some(out) = interface_comms.to_pc.dequeue() {
             if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
                 usb_serial.write(&ser_msg).ok();
             } else {
@@ -142,7 +142,7 @@ mod app {
                         FeedResult::DeserError(new_wind) => new_wind,
                         FeedResult::Success { data, remaining } => {
                             defmt::println!("got: {:?}", data);
-                            inc_prod.enqueue(data).ok();
+                            interface_comms.to_mcu.enqueue(data).ok();
                             remaining
                         }
                     };
@@ -155,32 +155,13 @@ mod app {
         usb_tick::spawn_after(1.millis()).ok();
     }
 
-    #[idle(local = [inc_cons, out_prod, i2c])]
+    #[idle(local = [worker])]
     fn idle(cx: idle::Context) -> ! {
         defmt::println!("Hello, world!");
-        let i2c = cx.local.i2c;
+        let worker = cx.local.worker;
 
         loop {
-            if let Some(data) = cx.local.inc_cons.dequeue() {
-                match data {
-                    ToMcu::I2c(ToMcuI2c::Write { addr, output }) => {
-                        // embedded_hal::blocking::i2c::Write
-                        let msg = match Write::write(i2c, addr, &output) {
-                            Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr: addr })),
-                            Err(_) => Err(()),
-                        };
-
-                        cx.local.out_prod.enqueue(msg).ok();
-                    }
-                    ToMcu::I2c(msg) => {
-                        defmt::println!("unhandled I2C! {:?}", msg);
-                    }
-                    ToMcu::Ping => {
-                        let msg: Result<_, ()> = Ok(ToPc::Pong);
-                        cx.local.out_prod.enqueue(msg).ok();
-                    }
-                }
-            }
+            unwrap!(worker.step().map_err(drop));
         }
     }
 }
