@@ -94,7 +94,7 @@ pub trait WorkerIo {
 pub struct Worker<IO, I2C>
 where
     IO: WorkerIo,
-    I2C: i2c::Write,
+    I2C: i2c::Write + i2c::Read + i2c::WriteRead,
 {
     pub io: IO,
     pub i2c: I2C,
