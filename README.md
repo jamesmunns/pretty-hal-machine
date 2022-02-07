@@ -1,4 +1,4 @@
-# Pretty HAL machine
+# pretty HAL machine
 
 ![Stream Diagram](./assets/diagram-001.jpg)
 
