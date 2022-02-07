@@ -132,11 +132,11 @@ where
             ToMcuI2c::Read { addr, to_read } => {
                 let mut buf = [0u8; 64];
                 let to_read_usize = to_read as usize;
-                let buf_slice = &mut buf[..to_read_usize];
 
                 if to_read_usize > buf.len() {
                     return Err(Error::I2c);
                 }
+                let buf_slice = &mut buf[..to_read_usize];
 
                 match i2c::Read::read(&mut self.i2c, addr, buf_slice) {
                     Ok(_) => Ok(ToPc::I2c(ToPcI2c::Read {
@@ -153,11 +153,11 @@ where
             } => {
                 let mut buf = [0u8; 64];
                 let to_read_usize = to_read as usize;
-                let buf_slice = &mut buf[..to_read_usize];
 
                 if to_read_usize > buf.len() {
                     return Err(Error::I2c);
                 }
+                let buf_slice = &mut buf[..to_read_usize];
 
                 match i2c::WriteRead::write_read(&mut self.i2c, addr, &output, buf_slice) {
                     Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteThenRead {
