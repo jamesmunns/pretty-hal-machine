@@ -20,18 +20,20 @@ mod app {
             clocks::init_clocks_and_plls,
             gpio::pin::{
                 bank0::{Gpio16, Gpio17},
-                FunctionI2C, Pin,
+                FunctionI2C, FunctionSpi, Pin,
             },
+            spi::{self, Spi},
             usb::UsbBus,
             watchdog::Watchdog,
-            Sio, I2C,
+            Clock, Sio, I2C,
         },
-        pac::I2C0,
+        pac::{I2C0, SPI0},
         XOSC_CRYSTAL_FREQ,
     };
     use usb_device::{class_prelude::*, prelude::*};
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type PicoI2C = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
+    type PicoI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
+    type PicoSpi = Spi<spi::Enabled, SPI0, 8>;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -41,15 +43,10 @@ mod app {
 
     #[local]
     struct Local {
-        // inc_prod: Producer<'static, ToMcu, 8>,
-        // inc_cons: Consumer<'static, ToMcu, 8>,
-        // out_prod: Producer<'static, Result<ToPc, ()>, 8>,
-        // out_cons: Consumer<'static, Result<ToPc, ()>, 8>,
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, PicoI2C>,
+        worker: Worker<WorkerComms<8>, PicoI2c, PicoSpi>,
         usb_serial: SerialPort<'static, UsbBus>,
         usb_dev: UsbDevice<'static, UsbBus>,
-        // i2c: I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>,
     }
 
     #[init(local = [
@@ -74,6 +71,7 @@ mod app {
         )
         .ok()
         .unwrap();
+        let pclk_freq = clocks.peripheral_clock.freq();
 
         // Configure the monotonic timer
         let mono = Monotonic::new(device.TIMER);
@@ -89,11 +87,9 @@ mod app {
             &mut resets,
         );
 
-        // Configure I2C pins
-        let sda_pin = pins.gpio16.into_mode::<rp_pico::hal::gpio::FunctionI2C>();
-        let scl_pin = pins.gpio17.into_mode::<rp_pico::hal::gpio::FunctionI2C>();
-
-        // Set up the I2C driver
+        // Set up the I2C pins and driver
+        let sda_pin = pins.gpio16.into_mode::<FunctionI2C>();
+        let scl_pin = pins.gpio17.into_mode::<FunctionI2C>();
         let i2c = I2C::i2c0(
             device.I2C0,
             sda_pin,
@@ -101,6 +97,17 @@ mod app {
             100.kHz(),
             &mut resets,
             clocks.peripheral_clock,
+        );
+
+        // Set up the SPI pins and driver
+        let _sck = pins.gpio2.into_mode::<FunctionSpi>();
+        let _mosi = pins.gpio3.into_mode::<FunctionSpi>();
+        let _miso = pins.gpio4.into_mode::<FunctionSpi>();
+        let spi = Spi::<_, _, 8>::new(device.SPI0).init(
+            &mut resets,
+            pclk_freq,
+            2_000_000_u32.Hz(),
+            &embedded_hal::spi::MODE_0,
         );
 
         // Set up USB Serial Port
@@ -133,6 +140,7 @@ mod app {
         let worker = Worker {
             io: worker_comms,
             i2c,
+            spi,
         };
         usb_tick::spawn().ok();
         (

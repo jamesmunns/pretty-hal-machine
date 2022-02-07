@@ -10,6 +10,7 @@ pub type Error = ();
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToMcu {
     I2c(ToMcuI2c),
+    Spi(ToMcuSpi),
     Ping,
 }
 
@@ -33,8 +34,16 @@ pub enum ToMcuI2c {
 
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
 #[derive(Debug, Serialize, Deserialize)]
+pub enum ToMcuSpi {
+    Write { output: Vec<u8, 64> },
+    Transfer { output: Vec<u8, 64> },
+}
+
+#[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ToPc {
     I2c(ToPcI2c),
+    Spi(ToPcSpi),
     Pong,
 }
 
@@ -44,4 +53,11 @@ pub enum ToPcI2c {
     WriteComplete { addr: u8 },
     Read { addr: u8, data_read: Vec<u8, 64> },
     WriteThenRead { addr: u8, data_read: Vec<u8, 64> },
+}
+
+#[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ToPcSpi {
+    WriteComplete,
+    Transfer { data_read: Vec<u8, 64> },
 }
