@@ -1,24 +1,38 @@
+//! # Pretty HAL Machine Worker
+//!
+//! This crate contains the device-agnostic logic that is shared among
+//! all implementations of the Pretty HAL Machine worker on different MCUs.
+
 #![no_std]
 
 use embedded_hal::blocking::i2c;
 use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 
+/// The worker Error type
+#[derive(Debug, defmt::Format, Eq, PartialEq)]
 pub enum Error {
     Io,
     I2c,
     Internal,
 }
 
+/// Helper types for MCU-to-PC communications
 pub mod comms {
     use heapless::spsc::{Consumer, Producer, Queue};
     use phm_icd::{Error as IcdError, ToMcu, ToPc};
 
+    /// A wrapper structure for statically allocated bidirectional queues
     pub struct CommsLink<const N: usize> {
         pub to_pc: &'static mut Queue<Result<ToPc, IcdError>, N>,
         pub to_mcu: &'static mut Queue<ToMcu, N>,
     }
 
     impl<const N: usize> CommsLink<N> {
+        /// Split the CommsLink into Worker and Interface halves.
+        ///
+        /// The WorkerComms half is intended to be used with a [Worker](crate::Worker) implmentation,
+        /// The InterfaceComms half is intended to be used where bytes are send and received to the
+        /// PC, such as the USB Serial handler function
         pub fn split(self) -> (WorkerComms<N>, InterfaceComms<N>) {
             let (to_pc_prod, to_pc_cons) = self.to_pc.split();
             let (to_mcu_prod, to_mcu_cons) = self.to_mcu.split();
@@ -36,6 +50,7 @@ pub mod comms {
         }
     }
 
+    /// The Worker half of the the CommsLink type.
     pub struct WorkerComms<const N: usize> {
         pub to_pc: Producer<'static, Result<ToPc, IcdError>, N>,
         pub to_mcu: Consumer<'static, ToMcu, N>,
@@ -53,19 +68,29 @@ pub mod comms {
         }
     }
 
+    /// Serial Interface half of the CommsLink type.
     pub struct InterfaceComms<const N: usize> {
         pub to_pc: Consumer<'static, Result<ToPc, IcdError>, N>,
         pub to_mcu: Producer<'static, ToMcu, N>,
     }
 }
 
+/// A trait for managing messages to or from a Worker
 pub trait WorkerIo {
     type Error;
 
+    /// Send a message FROM the worker, TO the PC.
     fn send(&mut self, msg: Result<ToPc, IcdError>) -> Result<(), Self::Error>;
+
+    /// Receive a message FROM the PC, TO the worker
     fn receive(&mut self) -> Option<ToMcu>;
 }
 
+/// A Pretty HAL Machine Worker
+///
+/// This struct is intended to contain all of the shared logic between workers.
+/// It is highly generic, which should allow the logic to execute regardless of
+/// the MCU the worker is executing on.
 pub struct Worker<IO, I2C>
 where
     IO: WorkerIo,
@@ -80,6 +105,7 @@ where
     IO: WorkerIo,
     I2C: i2c::Write,
 {
+    /// Process any pending messages to the worker
     pub fn step(&mut self) -> Result<(), Error> {
         while let Some(data) = self.io.receive() {
             let resp = match data {
@@ -99,7 +125,7 @@ where
             ToMcuI2c::Write { addr, output } => {
                 // embedded_hal::blocking::i2c::Write
                 let msg = match i2c::Write::write(&mut self.i2c, addr, &output) {
-                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr: addr })),
+                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr })),
                     Err(_) => Err(Error::I2c),
                 };
                 msg
