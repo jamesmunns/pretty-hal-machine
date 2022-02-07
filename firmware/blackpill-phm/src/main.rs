@@ -5,7 +5,7 @@ use blackpill_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = stm32f4xx_hal::pac, dispatchers = [USART1])]
 mod app {
-    use blackpill_phm::monotonic::MonoTimer;
+    use blackpill_phm::monotonic::{ExtU32, MonoTimer};
     use defmt::unwrap;
     use heapless::spsc::Queue;
     use phm_icd::{ToMcu, ToPc};
@@ -35,22 +35,21 @@ mod app {
     type Monotonic = MonoTimer<stm32f4xx_hal::pac::TIM2, 1_000_000>;
 
     #[shared]
-    struct Shared {
-        interface_comms: InterfaceComms<32>,
-        usb_serial: SerialPort<'static, UsbBus<USB>>,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
-        worker: Worker<WorkerComms<32>, BlackpillI2C>,
+        interface_comms: InterfaceComms<8>,
+        worker: Worker<WorkerComms<8>, BlackpillI2C>,
+        usb_serial: SerialPort<'static, UsbBus<USB>>,
         usb_dev: UsbDevice<'static, UsbBus<USB>>,
     }
 
     #[init(local = [
         ep_memory: [u32; 1024] = [0; 1024],
         usb_bus: Option<UsbBusAllocator<UsbBusType>> = None,
-        incoming: Queue<ToMcu, 32> = Queue::new(),
-        outgoing: Queue<Result<ToPc, ()>, 32> = Queue::new(),
+        incoming: Queue<ToMcu, 8> = Queue::new(),
+        outgoing: Queue<Result<ToPc, ()>, 8> = Queue::new(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let device = cx.device;
@@ -105,66 +104,69 @@ mod app {
             io: worker_comms,
             i2c,
         };
-
+        usb_tick::spawn().ok();
         (
-            Shared {
+            Shared {},
+            Local {
+                worker,
                 interface_comms,
                 usb_serial,
+                usb_dev,
             },
-            Local { worker, usb_dev },
             init::Monotonics(mono),
         )
     }
 
-    #[task(binds = OTG_FS, shared = [interface_comms, usb_serial], local = [usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
-    fn on_usb(cx: on_usb::Context) {
-        let mut usb_serial = cx.shared.usb_serial;
+    #[task(local = [usb_serial, interface_comms, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
+    fn usb_tick(cx: usb_tick::Context) {
+        let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
-        if usb_serial.lock(|usb_serial| usb_dev.poll(&mut [usb_serial])) {
-            let cobs_buf = cx.local.cobs_buf;
-            let mut interface_comms = cx.shared.interface_comms;
-            let mut buf = [0u8; 128];
+        let cobs_buf = cx.local.cobs_buf;
+        let interface_comms = cx.local.interface_comms;
 
-            match usb_serial.lock(|serial| serial.read(&mut buf)) {
-                Ok(sz) if sz > 0 => {
-                    let buf = &buf[..sz];
-                    let mut window = &buf[..];
+        let mut buf = [0u8; 128];
 
-                    'cobs: while !window.is_empty() {
-                        window = match cobs_buf.feed::<phm_icd::ToMcu>(&window) {
-                            FeedResult::Consumed => break 'cobs,
-                            FeedResult::OverFull(new_wind) => new_wind,
-                            FeedResult::DeserError(new_wind) => new_wind,
-                            FeedResult::Success { data, remaining } => {
-                                defmt::println!("got: {:?}", data);
-                                interface_comms.lock(|i| i.to_mcu.enqueue(data).ok());
-                                remaining
-                            }
-                        };
-                    }
-                }
-                Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
-                Err(_e) => defmt::panic!("Usb Error!"),
+        usb_dev.poll(&mut [usb_serial]);
+
+        if let Some(out) = interface_comms.to_pc.dequeue() {
+            if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
+                usb_serial.write(&ser_msg).ok();
+            } else {
+                defmt::panic!("Serialization error!");
             }
         }
+
+        match usb_serial.read(&mut buf) {
+            Ok(sz) if sz > 0 => {
+                let buf = &buf[..sz];
+                let mut window = &buf[..];
+
+                'cobs: while !window.is_empty() {
+                    window = match cobs_buf.feed::<phm_icd::ToMcu>(&window) {
+                        FeedResult::Consumed => break 'cobs,
+                        FeedResult::OverFull(new_wind) => new_wind,
+                        FeedResult::DeserError(new_wind) => new_wind,
+                        FeedResult::Success { data, remaining } => {
+                            defmt::println!("got: {:?}", data);
+                            interface_comms.to_mcu.enqueue(data).ok();
+                            remaining
+                        }
+                    };
+                }
+            }
+            Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
+            Err(_e) => defmt::panic!("Usb Error!"),
+        }
+        usb_tick::spawn_after(1.millis()).ok();
     }
 
-    #[idle(local = [worker], shared = [interface_comms, usb_serial])]
+    #[idle(local = [worker])]
     fn idle(cx: idle::Context) -> ! {
         defmt::println!("Hello, world!");
-        let mut usb_serial = cx.shared.usb_serial;
-        let mut interface_comms = cx.shared.interface_comms;
         let worker = cx.local.worker;
 
         loop {
             unwrap!(worker.step().map_err(drop));
-            if let Some(out) = interface_comms.lock(|i| i.to_pc.dequeue()) {
-                if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
-                    usb_serial.lock(|s| s.write(&ser_msg).ok());
-                } else {
-                    defmt::panic!("Serialization error!");
-                }
-            }
         }
     }
 }
