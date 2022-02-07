@@ -43,14 +43,17 @@ path = "../phm-worker"
 [dev-dependencies]
 defmt-test = "0.3.0"
 
+# NOTE! By default, we use the default `dev` profile to speed up CI runs! If you need
+# to troubleshoot the worker firmware, you may want to uncomment the following section.
+#
 # cargo build/run
-[profile.dev]
-codegen-units = 1
-debug = 2
-debug-assertions = true # <-
-incremental = false
-opt-level = 3 # <-
-overflow-checks = true # <-
+# [profile.dev]
+# codegen-units = 1
+# debug = 2
+# debug-assertions = true # <-
+# incremental = false
+# opt-level = 3 # <-
+# overflow-checks = true # <-
 
 # cargo test
 [profile.test]
