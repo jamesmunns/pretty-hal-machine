@@ -139,13 +139,18 @@ where
                 }
 
                 match i2c::Read::read(&mut self.i2c, addr, buf_slice) {
-                    Ok(_) => {
-                        Ok(ToPc::I2c(ToPcI2c::Read { addr, data_read: buf_slice.iter().cloned().collect() }))
-                    },
+                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::Read {
+                        addr,
+                        data_read: buf_slice.iter().cloned().collect(),
+                    })),
                     Err(_) => Err(Error::I2c),
                 }
-            },
-            ToMcuI2c::WriteThenRead { addr, output, to_read } => {
+            }
+            ToMcuI2c::WriteThenRead {
+                addr,
+                output,
+                to_read,
+            } => {
                 let mut buf = [0u8; 64];
                 let to_read_usize = to_read as usize;
                 let buf_slice = &mut buf[..to_read_usize];
@@ -155,12 +160,13 @@ where
                 }
 
                 match i2c::WriteRead::write_read(&mut self.i2c, addr, &output, buf_slice) {
-                    Ok(_) => {
-                        Ok(ToPc::I2c(ToPcI2c::WriteThenRead { addr, data_read: buf_slice.iter().cloned().collect() }))
-                    },
+                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteThenRead {
+                        addr,
+                        data_read: buf_slice.iter().cloned().collect(),
+                    })),
                     Err(_) => Err(Error::I2c),
                 }
-            },
+            }
         }
     }
 }
