@@ -3,6 +3,9 @@
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 
+// TODO: Something better than this
+pub type Error = ();
+
 #[cfg_attr(feature = "use-defmt", derive(defmt::Format))]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToMcu {
