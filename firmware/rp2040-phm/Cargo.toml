@@ -35,6 +35,9 @@ features = ["serde"]
 path = "../../common/phm-icd"
 features = ["use-defmt"]
 
+[dependencies.phm-worker]
+path = "../phm-worker"
+
 [dev-dependencies]
 defmt-test = "0.3.0"
 

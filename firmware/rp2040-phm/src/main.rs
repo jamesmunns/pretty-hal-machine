@@ -5,10 +5,15 @@ use rp2040_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
+    use defmt::unwrap;
     use embedded_hal::blocking::i2c::Write;
     use embedded_time::rate::Extensions;
-    use heapless::spsc::{Consumer, Producer, Queue};
-    use phm_icd::{ToMcu, ToMcuI2c, ToPc, ToPcI2c};
+    use heapless::spsc::Queue;
+    use phm_icd::{ToMcu, ToPc};
+    use phm_worker::{
+        comms::{CommsLink, InterfaceComms, WorkerComms},
+        Worker,
+    };
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use rp2040_monotonic::*;
     use rp_pico::{
@@ -27,6 +32,7 @@ mod app {
     };
     use usb_device::{class_prelude::*, prelude::*};
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
+    type PicoI2C = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -36,13 +42,15 @@ mod app {
 
     #[local]
     struct Local {
-        inc_prod: Producer<'static, ToMcu, 8>,
-        inc_cons: Consumer<'static, ToMcu, 8>,
-        out_prod: Producer<'static, Result<ToPc, ()>, 8>,
-        out_cons: Consumer<'static, Result<ToPc, ()>, 8>,
-        usb_dev: UsbDevice<'static, UsbBus>,
+        // inc_prod: Producer<'static, ToMcu, 8>,
+        // inc_cons: Consumer<'static, ToMcu, 8>,
+        // out_prod: Producer<'static, Result<ToPc, ()>, 8>,
+        // out_cons: Consumer<'static, Result<ToPc, ()>, 8>,
+        interface_comms: InterfaceComms<8>,
+        worker: Worker<WorkerComms<8>, PicoI2C>,
         usb_serial: SerialPort<'static, UsbBus>,
-        i2c: I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>,
+        usb_dev: UsbDevice<'static, UsbBus>,
+        // i2c: I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>,
     }
 
     #[init(local = [
@@ -116,37 +124,42 @@ mod app {
             .max_packet_size_0(64) // (makes control transfers 8x faster)
             .build();
 
-        let (inc_prod, inc_cons) = cx.local.incoming.split();
-        let (out_prod, out_cons) = cx.local.outgoing.split();
+        let comms = CommsLink {
+            to_pc: cx.local.outgoing,
+            to_mcu: cx.local.incoming,
+        };
+
+        let (worker_comms, interface_comms) = comms.split();
+
+        let worker = Worker {
+            io: worker_comms,
+            i2c,
+        };
 
         (
             Shared {},
             Local {
-                inc_prod,
-                inc_cons,
-                out_prod,
-                out_cons,
+                worker,
+                interface_comms,
                 usb_serial,
                 usb_dev,
-                i2c,
             },
             init::Monotonics(mono),
         )
     }
 
-    #[task(binds=USBCTRL_IRQ, local = [usb_serial, inc_prod, out_cons, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
+    #[task(binds=USBCTRL_IRQ, local = [usb_serial, interface_comms, usb_dev, cobs_buf: CobsAccumulator<512> = CobsAccumulator::new()])]
     fn on_usb(cx: on_usb::Context) {
         let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
         let cobs_buf = cx.local.cobs_buf;
-        let inc_prod = cx.local.inc_prod;
-        let out_cons = cx.local.out_cons;
+        let interface_comms = cx.local.interface_comms;
 
         let mut buf = [0u8; 128];
 
         usb_dev.poll(&mut [usb_serial]);
 
-        if let Some(out) = out_cons.dequeue() {
+        if let Some(out) = interface_comms.to_pc.dequeue() {
             if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
                 usb_serial.write(&ser_msg).ok();
             } else {
@@ -166,7 +179,7 @@ mod app {
                         FeedResult::DeserError(new_wind) => new_wind,
                         FeedResult::Success { data, remaining } => {
                             defmt::println!("got: {:?}", data);
-                            inc_prod.enqueue(data).ok();
+                            interface_comms.to_mcu.enqueue(data).ok();
                             remaining
                         }
                     };
@@ -177,32 +190,13 @@ mod app {
         }
     }
 
-    #[idle(local = [inc_cons, out_prod, i2c])]
+    #[idle(local = [worker])]
     fn idle(cx: idle::Context) -> ! {
         defmt::println!("Hello, world!");
-        let i2c = cx.local.i2c;
+        let worker = cx.local.worker;
 
         loop {
-            if let Some(data) = cx.local.inc_cons.dequeue() {
-                match data {
-                    ToMcu::I2c(ToMcuI2c::Write { addr, output }) => {
-                        // embedded_hal::blocking::i2c::Write
-                        let msg = match Write::write(i2c, addr, &output) {
-                            Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr: addr })),
-                            Err(_) => Err(()),
-                        };
-
-                        cx.local.out_prod.enqueue(msg).ok();
-                    }
-                    ToMcu::I2c(msg) => {
-                        defmt::println!("unhandled I2C! {:?}", msg);
-                    }
-                    ToMcu::Ping => {
-                        let msg: Result<_, ()> = Ok(ToPc::Pong);
-                        cx.local.out_prod.enqueue(msg).ok();
-                    }
-                }
-            }
+            unwrap!(worker.step().map_err(drop));
         }
     }
 }
