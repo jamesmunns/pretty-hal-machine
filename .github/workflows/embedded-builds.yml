@@ -36,4 +36,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
+          args: --manifest-path ./firmware/blackpill-phm/Cargo.toml --no-default-features --features=${{ matrix.feature }} --target=${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
           args: --manifest-path ./firmware/rp2040-phm/Cargo.toml --no-default-features --features=${{ matrix.feature }} --target=thumbv6m-none-eabi
