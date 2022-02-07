@@ -1,8 +1,8 @@
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 name: Embedded Builds
 
@@ -23,6 +23,7 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.rust }}
       - run: rustup target add thumbv7em-none-eabihf
+      - run: rustup target add thumbv6m-none-eabi
 
       - uses: actions-rs/cargo@v1
         with:
@@ -32,3 +33,7 @@ jobs:
         with:
           command: build
           args: --manifest-path ./firmware/phm-worker/Cargo.toml --no-default-features --features=${{ matrix.feature }} --target=${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path ./firmware/rp2040-phm/Cargo.toml --no-default-features --features=${{ matrix.feature }} --target=thumbv6m-none-eabi
