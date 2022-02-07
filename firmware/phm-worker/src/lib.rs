@@ -3,7 +3,6 @@
 use embedded_hal::blocking::i2c;
 use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToPc, ToPcI2c};
 
-
 pub enum Error {
     Io,
     I2c,
@@ -11,8 +10,8 @@ pub enum Error {
 }
 
 pub mod comms {
-    use heapless::spsc::{Queue, Producer, Consumer};
-    use phm_icd::{ToPc, ToMcu, Error as IcdError};
+    use heapless::spsc::{Consumer, Producer, Queue};
+    use phm_icd::{Error as IcdError, ToMcu, ToPc};
 
     pub struct CommsLink<const N: usize> {
         pub to_pc: &'static mut Queue<Result<ToPc, IcdError>, N>,
@@ -25,8 +24,14 @@ pub mod comms {
             let (to_mcu_prod, to_mcu_cons) = self.to_mcu.split();
 
             (
-                WorkerComms { to_pc: to_pc_prod, to_mcu: to_mcu_cons },
-                InterfaceComms { to_pc: to_pc_cons, to_mcu: to_mcu_prod },
+                WorkerComms {
+                    to_pc: to_pc_prod,
+                    to_mcu: to_mcu_cons,
+                },
+                InterfaceComms {
+                    to_pc: to_pc_cons,
+                    to_mcu: to_mcu_prod,
+                },
             )
         }
     }
@@ -53,7 +58,6 @@ pub mod comms {
         pub to_mcu: Producer<'static, ToMcu, N>,
     }
 }
-
 
 pub trait WorkerIo {
     type Error;

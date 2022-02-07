@@ -3,7 +3,6 @@
 
 use nrf52_phm as _; // global logger + panicking-behavior + memory layout
 
-
 #[rtic::app(device = nrf52840_hal::pac, dispatchers = [SWI0_EGU0])]
 mod app {
     use cortex_m::singleton;
@@ -19,18 +18,16 @@ mod app {
     };
     use nrf52_phm::monotonic::{ExtU32, MonoTimer};
     use phm_icd::{ToMcu, ToPc};
+    use phm_worker::{
+        comms::{CommsLink, InterfaceComms, WorkerComms},
+        Worker,
+    };
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use usb_device::{
         class_prelude::UsbBusAllocator,
         device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
     };
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    use phm_worker::{
-        Worker,
-        comms::{
-            CommsLink, InterfaceComms, WorkerComms,
-        },
-    };
 
     #[monotonic(binds = TIMER0, default = true)]
     type Monotonic = MonoTimer<TIMER0>;
