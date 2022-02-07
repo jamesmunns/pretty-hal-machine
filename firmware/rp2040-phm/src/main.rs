@@ -6,7 +6,6 @@ use rp2040_phm as _; // global logger + panicking-behavior + memory layout
 #[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use defmt::unwrap;
-    use embedded_hal::blocking::i2c::Write;
     use embedded_time::rate::Extensions;
     use heapless::spsc::Queue;
     use phm_icd::{ToMcu, ToPc};
