@@ -1,7 +1,7 @@
 [package]
 authors = ["James Munns <james@onevariable.com>", "Henrik Alsér <henrik.alser@me.com>"]
 name = "nrf52-phm"
-edition = "2018"
+edition = "2021"
 version = "0.1.0"
 
 [lib]
@@ -36,6 +36,9 @@ features = ["serde"]
 [dependencies.phm-icd]
 path = "../../common/phm-icd"
 features = ["use-defmt"]
+
+[dependencies.phm-worker]
+path = "../phm-worker"
 
 [dev-dependencies]
 defmt-test = "0.3.0"
