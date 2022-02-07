@@ -94,7 +94,7 @@ pub trait WorkerIo {
 pub struct Worker<IO, I2C>
 where
     IO: WorkerIo,
-    I2C: i2c::Write,
+    I2C: i2c::Write + i2c::Read + i2c::WriteRead,
 {
     pub io: IO,
     pub i2c: I2C,
@@ -103,7 +103,7 @@ where
 impl<IO, I2C> Worker<IO, I2C>
 where
     IO: WorkerIo,
-    I2C: i2c::Write,
+    I2C: i2c::Write + i2c::Read + i2c::WriteRead,
 {
     /// Process any pending messages to the worker
     pub fn step(&mut self) -> Result<(), Error> {
@@ -124,15 +124,48 @@ where
         match i2c_cmd {
             ToMcuI2c::Write { addr, output } => {
                 // embedded_hal::blocking::i2c::Write
-                let msg = match i2c::Write::write(&mut self.i2c, addr, &output) {
+                match i2c::Write::write(&mut self.i2c, addr, &output) {
                     Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteComplete { addr })),
                     Err(_) => Err(Error::I2c),
-                };
-                msg
+                }
             }
-            msg => {
-                defmt::error!("unhandled I2C! {:?}", msg);
-                Err(Error::Internal)
+            ToMcuI2c::Read { addr, to_read } => {
+                let mut buf = [0u8; 64];
+                let to_read_usize = to_read as usize;
+
+                if to_read_usize > buf.len() {
+                    return Err(Error::I2c);
+                }
+                let buf_slice = &mut buf[..to_read_usize];
+
+                match i2c::Read::read(&mut self.i2c, addr, buf_slice) {
+                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::Read {
+                        addr,
+                        data_read: buf_slice.iter().cloned().collect(),
+                    })),
+                    Err(_) => Err(Error::I2c),
+                }
+            }
+            ToMcuI2c::WriteThenRead {
+                addr,
+                output,
+                to_read,
+            } => {
+                let mut buf = [0u8; 64];
+                let to_read_usize = to_read as usize;
+
+                if to_read_usize > buf.len() {
+                    return Err(Error::I2c);
+                }
+                let buf_slice = &mut buf[..to_read_usize];
+
+                match i2c::WriteRead::write_read(&mut self.i2c, addr, &output, buf_slice) {
+                    Ok(_) => Ok(ToPc::I2c(ToPcI2c::WriteThenRead {
+                        addr,
+                        data_read: buf_slice.iter().cloned().collect(),
+                    })),
+                    Err(_) => Err(Error::I2c),
+                }
             }
         }
     }

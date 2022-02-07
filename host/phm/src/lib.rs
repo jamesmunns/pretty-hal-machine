@@ -25,6 +25,7 @@ pub enum Error {
 
     // TODO: This probably needs some more context/nuance...
     ResponseError,
+    InvalidParameter,
     Unknown,
 }
 
@@ -103,14 +104,9 @@ impl embedded_hal::blocking::i2c::Write for Machine {
     type Error = Error;
 
     fn write(&mut self, address: u8, bytes: &[u8]) -> Result<(), Error> {
-        let mut bytes_hvec: heapless::Vec<u8, 64> = heapless::Vec::new();
-
-        bytes.iter().for_each(|b| {
-            let _ = bytes_hvec.push(*b).unwrap();
-        });
         let msg = ToMcu::I2c(ToMcuI2c::Write {
             addr: address,
-            output: bytes_hvec,
+            output: bytes.iter().cloned().collect(),
         });
         let ser_msg = to_stdvec_cobs(&msg)?;
         self.port.write_all(&ser_msg)?;
@@ -119,7 +115,10 @@ impl embedded_hal::blocking::i2c::Write for Machine {
 
         while start.elapsed() < self.command_timeout {
             for msg in self.poll()? {
-                if let ToPc::I2c(ToPcI2c::WriteComplete { .. }) = msg {
+                if let ToPc::I2c(ToPcI2c::WriteComplete { addr }) = msg {
+                    if address != addr {
+                        continue;
+                    }
                     return Ok(());
                 }
             }
@@ -131,4 +130,91 @@ impl embedded_hal::blocking::i2c::Write for Machine {
 
         Err(Error::Timeout(self.command_timeout))
     }
+}
+
+impl embedded_hal::blocking::i2c::Read for Machine {
+    type Error = Error;
+
+    fn read(&mut self, address: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
+        let msg = ToMcu::I2c(ToMcuI2c::Read {
+            addr: address,
+            to_read: len_to_u32(buffer.len())?,
+        });
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::I2c(ToPcI2c::Read { addr, data_read }) = msg {
+                    if address != addr {
+                        continue;
+                    }
+
+                    if data_read.len() != buffer.len() {
+                        return Err(Error::ResponseError);
+                    } else {
+                        buffer.copy_from_slice(&data_read);
+                        return Ok(());
+                    }
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+impl embedded_hal::blocking::i2c::WriteRead for Machine {
+    type Error = Error;
+
+    fn write_read(
+        &mut self,
+        address: u8,
+        bytes: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        let msg = ToMcu::I2c(ToMcuI2c::WriteThenRead {
+            addr: address,
+            output: bytes.iter().cloned().collect(),
+            to_read: len_to_u32(buffer.len())?,
+        });
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::I2c(ToPcI2c::WriteThenRead { addr, data_read }) = msg {
+                    if address != addr {
+                        continue;
+                    }
+
+                    if data_read.len() != buffer.len() {
+                        return Err(Error::ResponseError);
+                    } else {
+                        buffer.copy_from_slice(&data_read);
+                        return Ok(());
+                    }
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+// TODO: This is overly accepting! We have a much smaller max message size than this.
+fn len_to_u32(len: usize) -> Result<u32, Error> {
+    len.try_into().map_err(|_| Error::InvalidParameter)
 }
