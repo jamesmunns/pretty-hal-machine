@@ -121,41 +121,41 @@ mod app {
     fn on_usb(cx: on_usb::Context) {
         let usb_serial = cx.local.usb_serial;
         let usb_dev = cx.local.usb_dev;
-        let cobs_buf = cx.local.cobs_buf;
-        let interface_comms = cx.local.interface_comms;
+        if usb_dev.poll(&mut [usb_serial]) {
+            let cobs_buf = cx.local.cobs_buf;
+            let interface_comms = cx.local.interface_comms;
 
-        let mut buf = [0u8; 128];
+            let mut buf = [0u8; 128];
 
-        usb_dev.poll(&mut [usb_serial]);
-
-        if let Some(out) = interface_comms.to_pc.dequeue() {
-            if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
-                usb_serial.write(&ser_msg).ok();
-            } else {
-                defmt::panic!("Serialization error!");
-            }
-        }
-
-        match usb_serial.read(&mut buf) {
-            Ok(sz) if sz > 0 => {
-                let buf = &buf[..sz];
-                let mut window = &buf[..];
-
-                'cobs: while !window.is_empty() {
-                    window = match cobs_buf.feed::<phm_icd::ToMcu>(&window) {
-                        FeedResult::Consumed => break 'cobs,
-                        FeedResult::OverFull(new_wind) => new_wind,
-                        FeedResult::DeserError(new_wind) => new_wind,
-                        FeedResult::Success { data, remaining } => {
-                            defmt::println!("got: {:?}", data);
-                            interface_comms.to_mcu.enqueue(data).ok();
-                            remaining
-                        }
-                    };
+            if let Some(out) = interface_comms.to_pc.dequeue() {
+                if let Ok(ser_msg) = to_vec_cobs::<_, 128>(&out) {
+                    usb_serial.write(&ser_msg).ok();
+                } else {
+                    defmt::panic!("Serialization error!");
                 }
             }
-            Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
-            Err(_e) => defmt::panic!("Usb Error!"),
+
+            match usb_serial.read(&mut buf) {
+                Ok(sz) if sz > 0 => {
+                    let buf = &buf[..sz];
+                    let mut window = &buf[..];
+
+                    'cobs: while !window.is_empty() {
+                        window = match cobs_buf.feed::<phm_icd::ToMcu>(&window) {
+                            FeedResult::Consumed => break 'cobs,
+                            FeedResult::OverFull(new_wind) => new_wind,
+                            FeedResult::DeserError(new_wind) => new_wind,
+                            FeedResult::Success { data, remaining } => {
+                                defmt::println!("got: {:?}", data);
+                                interface_comms.to_mcu.enqueue(data).ok();
+                                remaining
+                            }
+                        };
+                    }
+                }
+                Ok(_) | Err(usb_device::UsbError::WouldBlock) => {}
+                Err(_e) => defmt::panic!("Usb Error!"),
+            }
         }
     }
 

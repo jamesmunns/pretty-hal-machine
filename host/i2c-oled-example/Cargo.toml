@@ -1,0 +1,16 @@
+[package]
+name = "i2c-oled-example"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embedded-hal = "0.2.6"
+serialport = "4.0.1"
+ssd1306 = "0.7.0"
+
+[dependencies.phm]
+path = "../phm"
+version = "0.0.1"
+
