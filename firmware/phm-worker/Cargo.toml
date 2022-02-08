@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 defmt = "0.3.0"
 embedded-hal = "0.2.6"
+nb = "1.0.0"
 
 [dependencies.heapless]
 version = "0.7.10"

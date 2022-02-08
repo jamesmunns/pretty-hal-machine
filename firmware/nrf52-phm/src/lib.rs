@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod monotonic;
+pub mod uart;
 
 use defmt_rtt as _; // global logger
 

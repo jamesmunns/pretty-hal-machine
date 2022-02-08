@@ -470,6 +470,7 @@ dependencies = [
  "defmt",
  "embedded-hal",
  "heapless",
+ "nb 1.0.0",
  "phm-icd",
 ]
 
