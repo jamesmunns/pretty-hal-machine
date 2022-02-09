@@ -35,10 +35,9 @@ mod app {
         device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
     };
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type BlackpillI2c = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
-    type BlackpillUart =
-        Serial<USART2, (PA2<Alternate<PushPull, 7>>, PA3<Alternate<PushPull, 7>>), u8>;
-    type BlackpillSpi = Spi<
+    type PhmI2c = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
+    type PhmUart = Serial<USART2, (PA2<Alternate<PushPull, 7>>, PA3<Alternate<PushPull, 7>>), u8>;
+    type PhmSpi = Spi<
         SPI1,
         (
             PA5<Alternate<PushPull, 5>>,
@@ -57,7 +56,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, BlackpillI2c, BlackpillSpi, BlackpillUart>,
+        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus<USB>>,
         usb_dev: UsbDevice<'static, UsbBus<USB>>,
     }

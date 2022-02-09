@@ -3,9 +3,9 @@ use rp_pico::{
     pac::UART0,
 };
 
-pub struct MyUarte(pub Uarte<UartEnabled, UART0>);
+pub struct PhmUart(pub Uarte<UartEnabled, UART0>);
 
-impl embedded_hal::blocking::serial::Write<u8> for MyUarte {
+impl embedded_hal::blocking::serial::Write<u8> for PhmUart {
     type Error = ();
 
     fn bwrite_all(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
@@ -19,7 +19,7 @@ impl embedded_hal::blocking::serial::Write<u8> for MyUarte {
     }
 }
 
-impl embedded_hal::serial::Read<u8> for MyUarte {
+impl embedded_hal::serial::Read<u8> for PhmUart {
     type Error = ();
 
     fn read(&mut self) -> Result<u8, nb::Error<Self::Error>> {

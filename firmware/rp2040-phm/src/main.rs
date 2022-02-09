@@ -15,7 +15,7 @@ mod app {
     };
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use rp2040_monotonic::*;
-    use rp2040_phm::uart::MyUarte;
+    use rp2040_phm::uart::PhmUart;
     use rp_pico::{
         hal::{
             clocks::init_clocks_and_plls,
@@ -34,8 +34,8 @@ mod app {
     };
     use usb_device::{class_prelude::*, prelude::*};
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type PicoI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
-    type PicoSpi = Spi<spi::Enabled, SPI0, 8>;
+    type PhmI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
+    type PhmSpi = Spi<spi::Enabled, SPI0, 8>;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -46,7 +46,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, PicoI2c, PicoSpi, MyUarte>,
+        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus>,
         usb_dev: UsbDevice<'static, UsbBus>,
     }
@@ -146,7 +146,7 @@ mod app {
 
         let (worker_comms, interface_comms) = comms.split();
 
-        let worker = Worker::new(worker_comms, i2c, spi, MyUarte(uart));
+        let worker = Worker::new(worker_comms, i2c, spi, PhmUart(uart));
 
         usb_tick::spawn().ok();
         (

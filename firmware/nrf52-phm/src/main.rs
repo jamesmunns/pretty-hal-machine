@@ -19,7 +19,7 @@ mod app {
         Clocks,
     };
     use nrf52_phm::monotonic::{ExtU32, MonoTimer};
-    use nrf52_phm::uart::MyUarte;
+    use nrf52_phm::uart::PhmUart;
     use phm_icd::{ToMcu, ToPc};
     use phm_worker::{
         comms::{CommsLink, InterfaceComms, WorkerComms},
@@ -41,7 +41,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, Twim<TWIM0>, Spim<SPIM2>, MyUarte>,
+        worker: Worker<WorkerComms<8>, Twim<TWIM0>, Spim<SPIM2>, PhmUart>,
         usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
         usb_dev: UsbDevice<'static, Usbd<UsbPeripheral<'static>>>,
     }
@@ -102,7 +102,7 @@ mod app {
             cts: None,
             rts: None,
         };
-        let uart = MyUarte(Uarte::new(
+        let uart = PhmUart(Uarte::new(
             device.UARTE0,
             pins,
             Parity::EXCLUDED,
