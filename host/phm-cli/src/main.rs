@@ -1,5 +1,10 @@
 use phm::Machine;
+use serialport::SerialPortInfo;
 use std::time::{Duration, Instant};
+
+use crate::cli::PhmCli;
+
+mod cli;
 
 fn main() -> Result<(), ()> {
     println!("Hello, world!");
@@ -33,18 +38,9 @@ fn main() -> Result<(), ()> {
 
     let mut ehal = Machine::from_port(port).unwrap();
 
-    let mut last_send = Instant::now();
-
-    loop {
-        if last_send.elapsed() >= Duration::from_secs(1) {
-            // println!("Sending I2C command!");
-            // embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
-
-            let mut buf = [1, 2, 3, 4];
-            println!("Sending SPI: {:?}", buf);
-            embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
-            println!("Received SPI: {:?}", buf);
-            last_send = Instant::now();
-        }
+    if let Err(err) = PhmCli::run(&mut ehal) {
+        eprintln!("{:?}", err)
     }
+
+    Ok(())
 }
