@@ -703,6 +703,7 @@ dependencies = [
  "nb 1.0.0",
  "rand_core",
  "rtcc",
+ "rtic-monotonic",
  "stm32f4",
  "synopsys-usb-otg",
  "void",

@@ -5,7 +5,6 @@ use blackpill_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = stm32f4xx_hal::pac, dispatchers = [USART1])]
 mod app {
-    use blackpill_phm::monotonic::{ExtU32, MonoTimer};
     use defmt::unwrap;
     use heapless::spsc::Queue;
     use phm_icd::{ToMcu, ToPc};
@@ -26,6 +25,10 @@ mod app {
         prelude::*,
         serial::{config::Config as UartConfig, Serial},
         spi::{Mode, Phase, Polarity, Spi, TransferModeNormal},
+        timer::{
+            monotonic::{ExtU32, MonoTimer},
+            Timer,
+        },
     };
     use usb_device::{
         class_prelude::UsbBusAllocator,
@@ -73,7 +76,7 @@ mod app {
         let clocks = rcc.cfgr.sysclk(48.mhz()).require_pll48clk().freeze();
 
         // Configure the monotonic timer, currently using TIMER0, a 32-bit, 1MHz timer
-        let mono = Monotonic::new(device.TIM2, &clocks);
+        let mono = Timer::new(device.TIM2, &clocks).monotonic();
 
         // Create GPIO ports for pin-mapping
         let gpioa = device.GPIOA.split();
