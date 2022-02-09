@@ -1,9 +1,11 @@
 use std::num::ParseIntError;
 
 use clap::{Args, Parser, Subcommand};
-use embedded_hal::prelude::{_embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write};
+use embedded_hal::prelude::{
+    _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
+    _embedded_hal_blocking_i2c_WriteRead,
+};
 use phm::Machine;
-use serialport::SerialPortInfo;
 
 #[derive(Parser, Debug)]
 pub enum PhmCli {
@@ -18,63 +20,70 @@ pub struct I2C {
 
 #[derive(Subcommand, Debug)]
 enum I2CCommand {
+    /// Write bytes to the given address
     #[clap(name = "write")]
     I2CWrite(I2CWrite),
+    /// Read count bytes from the given address
     #[clap(name = "read")]
     I2CRead(I2CRead),
-    #[clap(name = "read-write")]
-    I2CReadWrite(I2CReadWrite),
+    /// Write-Read bytes to and from the given address
+    #[clap(name = "write-read")]
+    WriteRead(WriteRead),
 }
 
 #[derive(Args, Debug)]
 struct I2CWrite {
+    /// The address to write to.
     #[clap(short = 'a')]
     address: u8,
+    /// Bytes to write to the address. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(short = 'b', long = "write")]
     write_bytes: String,
 }
 
 #[derive(Args, Debug)]
 struct I2CRead {
+    /// The address to write to.
     #[clap(short = 'a')]
     address: u8,
+    /// Number of bytes to read.
     #[clap(long = "read-ct")]
     read_count: usize,
 }
 
 #[derive(Args, Debug)]
-struct I2CReadWrite {
+struct WriteRead {
+    /// The address to write to.
     #[clap(short = 'a')]
     address: u8,
     #[clap(short = 'b', long = "bytes")]
     write_bytes: String,
+    /// Bytes to write to the address. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(long = "read-ct")]
     read_count: usize,
 }
 
 impl PhmCli {
-    pub fn run(machine: &mut Machine) -> Result<(), phm::Error> {
-        let cmd = PhmCli::parse();
-
-        match cmd {
-            PhmCli::I2C(cmd) => match cmd.command {
+    pub fn run(&self, machine: &mut Machine) -> Result<(), phm::Error> {
+        match self {
+            PhmCli::I2C(cmd) => match &cmd.command {
                 I2CCommand::I2CWrite(args) => {
                     let bytes =
                         parse_bytes(&args.write_bytes).map_err(|_| phm::Error::InvalidParameter)?;
+
                     machine.write(args.address, &bytes)
                 }
                 I2CCommand::I2CRead(args) => {
                     let mut buffer = vec![0u8; args.read_count];
 
-                    machine.read(args.address, buffer.as_mut())
+                    machine.read(args.address, &mut buffer)
                 }
-                I2CCommand::I2CReadWrite(args) => {
+                I2CCommand::WriteRead(args) => {
                     let bytes =
                         parse_bytes(&args.write_bytes).map_err(|_| phm::Error::InvalidParameter)?;
-                    machine.write(args.address, &bytes)?;
-
                     let mut buffer = vec![0u8; args.read_count];
-                    machine.read(args.address, buffer.as_mut())
+
+                    machine.write_read(args.address, &bytes, &mut buffer)
                 }
             },
         }

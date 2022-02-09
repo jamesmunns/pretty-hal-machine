@@ -1,13 +1,13 @@
+use clap::Parser;
 use phm::Machine;
-use serialport::SerialPortInfo;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::cli::PhmCli;
 
 mod cli;
 
-fn main() -> Result<(), ()> {
-    println!("Hello, world!");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cmd = PhmCli::parse();
 
     let mut dport = None;
 
@@ -34,13 +34,9 @@ fn main() -> Result<(), ()> {
     let port = serialport::new(dport.port_name, 115200)
         .timeout(Duration::from_millis(5))
         .open()
-        .map_err(drop)?;
+        .map_err(|_| "Error: failed to create port")?;
 
     let mut ehal = Machine::from_port(port).unwrap();
 
-    if let Err(err) = PhmCli::run(&mut ehal) {
-        eprintln!("{:?}", err)
-    }
-
-    Ok(())
+    cmd.run(&mut ehal).map_err(|e| e.into())
 }
