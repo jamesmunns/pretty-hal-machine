@@ -235,15 +235,11 @@ where
                 Err(_) => Err(Error::Uart),
             },
             ToMcuUart::Read => {
-                if !self.uart_rx.is_empty() {
-                    self.io
-                        .send(Ok(ToPc::Uart(ToPcUart::Read {
-                            data_read: self.uart_rx.clone().into_iter().collect(),
-                        })))
-                        .ok();
-                    self.uart_rx.clear();
-                }
-                Ok(ToPc::Uart(ToPcUart::ReadComplete))
+                let response = ToPc::Uart(ToPcUart::Read {
+                    data_read: self.uart_rx.clone().into_iter().collect(),
+                });
+                self.uart_rx.clear();
+                Ok(response)
             }
         }
     }

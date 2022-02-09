@@ -76,6 +76,5 @@ pub enum ToPcSpi {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToPcUart {
     WriteComplete,
-    ReadComplete,
     Read { data_read: Vec<u8, 64> },
 }

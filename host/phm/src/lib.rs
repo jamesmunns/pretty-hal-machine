@@ -333,7 +333,7 @@ impl embedded_hal::serial::Read<u8> for Machine {
 
     fn read(&mut self) -> Result<u8, nb::Error<Error>> {
         if !self.uart_rx_buf.is_empty() {
-            return Ok(self.uart_rx_buf.pop_front().unwrap());
+            Ok(self.uart_rx_buf.pop_front().unwrap())
         } else {
             let msg = ToMcu::Uart(ToMcuUart::Read);
             let ser_msg = to_stdvec_cobs(&msg).unwrap();
