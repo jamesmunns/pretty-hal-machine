@@ -12,4 +12,4 @@ clap = { version = "3.0.14", features = ["derive"] }
 
 [dependencies.phm]
 path = "../phm"
-version = "0.0.1"
+version = "0.0.2"

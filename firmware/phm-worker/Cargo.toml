@@ -24,5 +24,6 @@ nb = "1.0.0"
 version = "0.7.10"
 
 [dependencies.phm-icd]
+version = "0.0.2"
 path = "../../common/phm-icd"
 features = ["use-defmt"]
