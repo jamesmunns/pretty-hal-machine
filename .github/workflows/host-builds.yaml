@@ -35,4 +35,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --manifest-path ./host/i2c-oled-example/Cargo.toml --target=${{ matrix.target }}
+          args: --manifest-path ./examples/i2c-oled-example/Cargo.toml --target=${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path ./examples/uart-example/Cargo.toml --target=${{ matrix.target }}

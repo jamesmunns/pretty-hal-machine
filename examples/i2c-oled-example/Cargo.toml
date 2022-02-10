@@ -11,6 +11,6 @@ serialport = "4.0.1"
 ssd1306 = "0.7.0"
 
 [dependencies.phm]
-path = "../phm"
+path = "../../host/phm"
 version = "0.0.1"
 

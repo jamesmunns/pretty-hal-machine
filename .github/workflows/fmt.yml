@@ -34,10 +34,16 @@ jobs:
         with:
           command: fmt
           args: --manifest-path ./host/phm/Cargo.toml -- --check
+
+      # Examples directory
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --manifest-path ./host/i2c-oled-example/Cargo.toml -- --check
+          args: --manifest-path ./examples/i2c-oled-example/Cargo.toml -- --check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path ./examples/uart-example/Cargo.toml -- --check
 
       # Firmware directory
       - uses: actions-rs/cargo@v1
