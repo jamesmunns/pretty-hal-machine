@@ -1,9 +1,12 @@
 [package]
 name = "phm-icd"
-version = "0.0.1"
+version = "0.0.2"
 description = "The Interface Control Document (ICD) for Pretty HAL Machine"
 repository = "https://github.com/jamesmunns/pretty-hal-machine"
-authors = ["James Munns <james@onevariable.com>"]
+authors = [
+    "James Munns <james@onevariable.com>",
+    "Henrik Alsér <henrik.alser@me.com>",
+]
 edition = "2021"
 readme = "../../README.md"
 
