@@ -3,6 +3,7 @@ use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
 use std::{
     collections::VecDeque,
+    fmt::Display,
     io::{self, ErrorKind},
     time::{Duration, Instant},
 };
@@ -42,6 +43,33 @@ impl From<io::Error> for Error {
         Error::PhmSerial(err)
     }
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::PhmSerial(e) => {
+                write!(f, "PhmSerialError: {}", e)
+            }
+            Error::Postcard(e) => {
+                write!(f, "PostcardError: {}", e)
+            }
+            Error::Timeout(d) => {
+                write!(f, "Timeout({:?})", d)
+            }
+            Error::ResponseError => {
+                write!(f, "ResponseError")
+            }
+            Error::InvalidParameter => {
+                write!(f, "InvalidParameterError")
+            }
+            Error::Unknown => {
+                write!(f, "UnknownError")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 impl Machine {
     pub fn from_port(port: Box<dyn SerialPort>) -> Result<Self, Error> {
