@@ -351,18 +351,29 @@ impl embedded_hal::serial::Read<u8> for Machine {
             let msg = ToMcu::Uart(ToMcuUart::Read);
             let ser_msg = to_stdvec_cobs(&msg).unwrap();
             self.port.write_all(&ser_msg).unwrap();
-            if let Ok(vec) = self.poll() {
-                for msg in vec {
-                    if let ToPc::Uart(ToPcUart::Read { data_read }) = msg {
-                        self.uart_rx_buf.extend(data_read);
+
+            let start = Instant::now();
+
+            while start.elapsed() < self.command_timeout {
+                if let Ok(vec) = self.poll() {
+                    for msg in vec {
+                        if let ToPc::Uart(ToPcUart::Read { data_read }) = msg {
+                            self.uart_rx_buf.extend(data_read);
+                            // break 'timeout;
+                            if !self.uart_rx_buf.is_empty() {
+                                return Ok(self.uart_rx_buf.pop_front().unwrap());
+                            } else {
+                                return Err(nb::Error::WouldBlock);
+                            }
+                        }
                     }
                 }
+
+                // TODO: We should probably just use the `timeout` value of the serial
+                // port, (e.g. don't delay at all), but I guess this is fine for now.
+                std::thread::sleep(Duration::from_millis(10));
             }
-            if !self.uart_rx_buf.is_empty() {
-                Ok(self.uart_rx_buf.pop_front().unwrap())
-            } else {
-                Err(nb::Error::WouldBlock)
-            }
+            Err(nb::Error::Other(Error::Timeout(self.command_timeout)))
         }
     }
 }

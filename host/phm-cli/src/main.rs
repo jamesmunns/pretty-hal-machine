@@ -47,15 +47,15 @@ fn main() -> Result<(), ()> {
             // embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
             // println!("Received SPI: {:?}", buf);
 
-            let str = "Hello\n";
-            print!("UART TX: {}", str);
+            let str = "Pretty HAL machine!\n";
+            print!("TX: {}", str);
             embedded_hal::blocking::serial::Write::<u8>::bwrite_all(&mut ehal, str.as_bytes())
                 .unwrap();
 
             last_send = Instant::now();
         }
         while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
-            println!("UART RX: {:x}", b);
+            println!("RX: {:x}", b);
         }
     }
 }
