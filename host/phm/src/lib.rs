@@ -1,7 +1,8 @@
-use phm_icd::{ToMcu, ToMcuI2c, ToMcuSpi, ToPc, ToPcI2c, ToPcSpi};
+use phm_icd::{ToMcu, ToMcuI2c, ToMcuSpi, ToMcuUart, ToPc, ToPcI2c, ToPcSpi, ToPcUart};
 use postcard::{to_stdvec_cobs, CobsAccumulator, FeedResult};
 use serialport::SerialPort;
 use std::{
+    collections::VecDeque,
     fmt::Display,
     io::{self, ErrorKind},
     time::{Duration, Instant},
@@ -15,6 +16,7 @@ pub struct Machine {
     port: Box<dyn SerialPort>,
     cobs_buf: CobsAccumulator<512>,
     command_timeout: Duration,
+    uart_rx_buf: VecDeque<u8>,
 }
 
 /// The main Error type
@@ -77,6 +79,7 @@ impl Machine {
             port,
             cobs_buf: CobsAccumulator::new(),
             command_timeout: Duration::from_secs(3),
+            uart_rx_buf: Default::default(),
         })
     }
 
@@ -300,6 +303,106 @@ impl embedded_hal::blocking::spi::Transfer<u8> for Machine {
         }
 
         Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+impl embedded_hal::blocking::serial::Write<u8> for Machine {
+    type Error = Error;
+
+    fn bwrite_all(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        let msg = ToMcu::Uart(ToMcuUart::Write {
+            output: bytes.iter().cloned().collect(),
+        });
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::Uart(ToPcUart::WriteComplete) = msg {
+                    return Ok(());
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+
+    fn bflush(&mut self) -> Result<(), Self::Error> {
+        let msg = ToMcu::Uart(ToMcuUart::Flush);
+        let ser_msg = to_stdvec_cobs(&msg)?;
+        self.port.write_all(&ser_msg)?;
+
+        let start = Instant::now();
+
+        while start.elapsed() < self.command_timeout {
+            for msg in self.poll()? {
+                if let ToPc::Uart(ToPcUart::WriteComplete) = msg {
+                    return Ok(());
+                }
+            }
+
+            // TODO: We should probably just use the `timeout` value of the serial
+            // port, (e.g. don't delay at all), but I guess this is fine for now.
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        Err(Error::Timeout(self.command_timeout))
+    }
+}
+
+impl embedded_hal::serial::Write<u8> for Machine {
+    type Error = Error;
+
+    fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
+        embedded_hal::blocking::serial::Write::<u8>::bwrite_all(self, &[byte])
+            .map_err(|_| nb::Error::WouldBlock)
+    }
+
+    fn flush(&mut self) -> nb::Result<(), Self::Error> {
+        embedded_hal::blocking::serial::Write::<u8>::bflush(self).map_err(|_| nb::Error::WouldBlock)
+    }
+}
+
+impl embedded_hal::serial::Read<u8> for Machine {
+    type Error = Error;
+
+    fn read(&mut self) -> nb::Result<u8, Self::Error> {
+        if !self.uart_rx_buf.is_empty() {
+            Ok(self.uart_rx_buf.pop_front().unwrap())
+        } else {
+            let msg = ToMcu::Uart(ToMcuUart::Read);
+            let ser_msg = to_stdvec_cobs(&msg).unwrap();
+            self.port.write_all(&ser_msg).unwrap();
+
+            let start = Instant::now();
+
+            while start.elapsed() < self.command_timeout {
+                if let Ok(vec) = self.poll() {
+                    for msg in vec {
+                        if let ToPc::Uart(ToPcUart::Read { data_read }) = msg {
+                            self.uart_rx_buf.extend(data_read);
+                            // break 'timeout;
+                            if !self.uart_rx_buf.is_empty() {
+                                return Ok(self.uart_rx_buf.pop_front().unwrap());
+                            } else {
+                                return Err(nb::Error::WouldBlock);
+                            }
+                        }
+                    }
+                }
+
+                // TODO: We should probably just use the `timeout` value of the serial
+                // port, (e.g. don't delay at all), but I guess this is fine for now.
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(nb::Error::Other(Error::Timeout(self.command_timeout)))
+        }
     }
 }
 

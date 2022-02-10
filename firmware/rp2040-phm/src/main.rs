@@ -20,20 +20,22 @@ mod app {
             clocks::init_clocks_and_plls,
             gpio::pin::{
                 bank0::{Gpio16, Gpio17},
-                FunctionI2C, FunctionSpi, Pin,
+                FunctionI2C, FunctionSpi, FunctionUart, Pin,
             },
             spi::{self, Spi},
+            uart::{common_configs as UartConfig, Enabled as UartEnabled, UartPeripheral},
             usb::UsbBus,
             watchdog::Watchdog,
             Clock, Sio, I2C,
         },
-        pac::{I2C0, SPI0},
+        pac::{I2C0, SPI0, UART0},
         XOSC_CRYSTAL_FREQ,
     };
     use usb_device::{class_prelude::*, prelude::*};
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type PicoI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
-    type PicoSpi = Spi<spi::Enabled, SPI0, 8>;
+    type PhmI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
+    type PhmSpi = Spi<spi::Enabled, SPI0, 8>;
+    type PhmUart = UartPeripheral<UartEnabled, UART0>;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -44,7 +46,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, PicoI2c, PicoSpi>,
+        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus>,
         usb_dev: UsbDevice<'static, UsbBus>,
     }
@@ -110,6 +112,13 @@ mod app {
             &embedded_hal::spi::MODE_0,
         );
 
+        // Set up UART
+        let _tx_pin = pins.gpio0.into_mode::<FunctionUart>();
+        let _rx_pin = pins.gpio1.into_mode::<FunctionUart>();
+        let uart = UartPeripheral::new(device.UART0, &mut resets)
+            .enable(UartConfig::_9600_8_N_1, pclk_freq)
+            .unwrap();
+
         // Set up USB Serial Port
         let usb_bus = cx.local.usb_bus;
         usb_bus.replace(UsbBusAllocator::new(UsbBus::new(
@@ -137,11 +146,8 @@ mod app {
 
         let (worker_comms, interface_comms) = comms.split();
 
-        let worker = Worker {
-            io: worker_comms,
-            i2c,
-            spi,
-        };
+        let worker = Worker::new(worker_comms, i2c, spi, uart);
+
         usb_tick::spawn().ok();
         (
             Shared {},

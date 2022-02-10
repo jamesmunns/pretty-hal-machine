@@ -5,7 +5,6 @@ use blackpill_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = stm32f4xx_hal::pac, dispatchers = [USART1])]
 mod app {
-    use blackpill_phm::monotonic::{ExtU32, MonoTimer};
     use defmt::unwrap;
     use heapless::spsc::Queue;
     use phm_icd::{ToMcu, ToPc};
@@ -16,23 +15,29 @@ mod app {
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
     use stm32f4xx_hal::{
         gpio::{
-            gpioa::{PA5, PA6, PA7},
+            gpioa::{PA2, PA3, PA5, PA6, PA7},
             gpiob::{PB8, PB9},
             Alternate, OpenDrain, PushPull,
         },
         i2c::I2c,
         otg_fs::{UsbBus, UsbBusType, USB},
-        pac::{I2C1, SPI1},
+        pac::{I2C1, SPI1, USART2},
         prelude::*,
+        serial::{config::Config as UartConfig, Serial},
         spi::{Mode, Phase, Polarity, Spi, TransferModeNormal},
+        timer::{
+            monotonic::{ExtU32, MonoTimer},
+            Timer,
+        },
     };
     use usb_device::{
         class_prelude::UsbBusAllocator,
         device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
     };
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
-    type BlackpillI2c = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
-    type BlackpillSpi = Spi<
+    type PhmI2c = I2c<I2C1, (PB8<Alternate<OpenDrain, 4>>, PB9<Alternate<OpenDrain, 4>>)>;
+    type PhmUart = Serial<USART2, (PA2<Alternate<PushPull, 7>>, PA3<Alternate<PushPull, 7>>), u8>;
+    type PhmSpi = Spi<
         SPI1,
         (
             PA5<Alternate<PushPull, 5>>,
@@ -51,7 +56,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, BlackpillI2c, BlackpillSpi>,
+        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus<USB>>,
         usb_dev: UsbDevice<'static, UsbBus<USB>>,
     }
@@ -70,7 +75,7 @@ mod app {
         let clocks = rcc.cfgr.sysclk(48.mhz()).require_pll48clk().freeze();
 
         // Configure the monotonic timer, currently using TIMER0, a 32-bit, 1MHz timer
-        let mono = Monotonic::new(device.TIM2, &clocks);
+        let mono = Timer::new(device.TIM2, &clocks).monotonic();
 
         // Create GPIO ports for pin-mapping
         let gpioa = device.GPIOA.split();
@@ -95,6 +100,18 @@ mod app {
             2_000.khz(),
             &clocks,
         );
+
+        // define RX/TX pins
+        let tx_pin = gpioa.pa2.into_alternate();
+        let rx_pin = gpioa.pa3.into_alternate();
+        // configure serial
+        let uart = Serial::new(
+            device.USART2,
+            (tx_pin, rx_pin),
+            UartConfig::default().baudrate(9600.bps()),
+            &clocks,
+        )
+        .unwrap();
 
         // Set up USB
         let usb = USB {
@@ -127,11 +144,7 @@ mod app {
 
         let (worker_comms, interface_comms) = comms.split();
 
-        let worker = Worker {
-            io: worker_comms,
-            i2c,
-            spi,
-        };
+        let worker = Worker::new(worker_comms, i2c, spi, uart);
         usb_tick::spawn().ok();
         (
             Shared {},

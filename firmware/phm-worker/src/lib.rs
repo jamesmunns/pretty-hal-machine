@@ -6,7 +6,10 @@
 #![no_std]
 
 use embedded_hal::blocking::{i2c, spi};
-use phm_icd::{Error as IcdError, ToMcu, ToMcuI2c, ToMcuSpi, ToPc, ToPcI2c, ToPcSpi};
+use embedded_hal::serial;
+use phm_icd::{
+    Error as IcdError, ToMcu, ToMcuI2c, ToMcuSpi, ToMcuUart, ToPc, ToPcI2c, ToPcSpi, ToPcUart,
+};
 
 /// The worker Error type
 #[derive(Debug, defmt::Format, Eq, PartialEq)]
@@ -14,6 +17,7 @@ pub enum Error {
     Io,
     I2c,
     Spi,
+    Uart,
     Internal,
 }
 
@@ -92,29 +96,46 @@ pub trait WorkerIo {
 /// This struct is intended to contain all of the shared logic between workers.
 /// It is highly generic, which should allow the logic to execute regardless of
 /// the MCU the worker is executing on.
-pub struct Worker<IO, I2C, SPI>
+pub struct Worker<IO, I2C, SPI, UART>
 where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
     SPI: spi::Write<u8> + spi::Transfer<u8>,
+    UART: serial::Write<u8> + serial::Read<u8>,
 {
     pub io: IO,
     pub i2c: I2C,
     pub spi: SPI,
+    pub uart: UART,
+    uart_rx: heapless::Deque<u8, 64>,
 }
 
-impl<IO, I2C, SPI> Worker<IO, I2C, SPI>
+impl<IO, I2C, SPI, UART> Worker<IO, I2C, SPI, UART>
 where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
     SPI: spi::Write<u8> + spi::Transfer<u8>,
+    UART: serial::Write<u8> + serial::Read<u8>,
 {
+    pub fn new(io: IO, i2c: I2C, spi: SPI, uart: UART) -> Self {
+        Worker {
+            io,
+            i2c,
+            spi,
+            uart,
+            uart_rx: heapless::Deque::new(),
+        }
+    }
     /// Process any pending messages to the worker
     pub fn step(&mut self) -> Result<(), Error> {
+        while let Ok(data_read) = serial::Read::<u8>::read(&mut self.uart) {
+            self.uart_rx.push_back(data_read).ok();
+        }
         while let Some(data) = self.io.receive() {
             let resp = match data {
                 ToMcu::I2c(i2c) => self.process_i2c(i2c),
                 ToMcu::Spi(spi) => self.process_spi(spi),
+                ToMcu::Uart(uart) => self.process_uart(uart),
                 ToMcu::Ping => {
                     defmt::info!("Received Ping! Responding...");
                     Ok(ToPc::Pong)
@@ -197,6 +218,29 @@ where
                     })),
                     Err(_) => Err(Error::Spi),
                 }
+            }
+        }
+    }
+
+    fn process_uart(&mut self, uart_cmd: ToMcuUart) -> Result<ToPc, Error> {
+        match uart_cmd {
+            ToMcuUart::Write { output } => {
+                for &b in output.iter() {
+                    nb::block!(serial::Write::<u8>::write(&mut self.uart, b))
+                        .map_err(|_| Error::Uart)?;
+                }
+                Ok(ToPc::Uart(ToPcUart::WriteComplete))
+            }
+            ToMcuUart::Flush => {
+                nb::block!(serial::Write::<u8>::flush(&mut self.uart)).map_err(|_| Error::Uart)?;
+                Ok(ToPc::Uart(ToPcUart::WriteComplete))
+            }
+            ToMcuUart::Read => {
+                let response = ToPc::Uart(ToPcUart::Read {
+                    data_read: self.uart_rx.clone().into_iter().collect(),
+                });
+                self.uart_rx.clear();
+                Ok(response)
             }
         }
     }

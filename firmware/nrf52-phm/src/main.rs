@@ -14,10 +14,12 @@ mod app {
         pac::{SPIM2, TIMER0, TWIM0},
         spim::{Frequency as SpimFreq, Pins as SpimPins, Spim, MODE_0},
         twim::{Frequency as TwimFreq, Pins as TwimPins, Twim},
+        uarte::{Baudrate, Parity, Pins as UartPins, Uarte},
         usbd::{UsbPeripheral, Usbd},
         Clocks,
     };
     use nrf52_phm::monotonic::{ExtU32, MonoTimer};
+    use nrf52_phm::uart::PhmUart;
     use phm_icd::{ToMcu, ToPc};
     use phm_worker::{
         comms::{CommsLink, InterfaceComms, WorkerComms},
@@ -39,7 +41,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, Twim<TWIM0>, Spim<SPIM2>>,
+        worker: Worker<WorkerComms<8>, Twim<TWIM0>, Spim<SPIM2>, PhmUart>,
         usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
         usb_dev: UsbDevice<'static, Usbd<UsbPeripheral<'static>>>,
     }
@@ -48,6 +50,8 @@ mod app {
         usb_bus: Option<UsbBusAllocator<Usbd<UsbPeripheral<'static>>>> = None,
         incoming: Queue<ToMcu, 8> = Queue::new(),
         outgoing: Queue<Result<ToPc, ()>, 8> = Queue::new(),
+        uart_rx_buf: [u8; 64] = [0; 64],
+        uart_tx_buf: [u8; 1] = [0],
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let device = cx.device;
@@ -91,6 +95,21 @@ mod app {
             0,
         );
 
+        // Set up UART
+        let rxd = port0.p0_28.into_floating_input().degrade();
+        let txd = port0.p0_29.into_push_pull_output(Level::High).degrade();
+        let pins = UartPins {
+            rxd,
+            txd,
+            cts: None,
+            rts: None,
+        };
+        let uarte = Uarte::new(device.UARTE0, pins, Parity::EXCLUDED, Baudrate::BAUD9600);
+        let (tx, rx) = uarte
+            .split(cx.local.uart_rx_buf, cx.local.uart_tx_buf)
+            .unwrap();
+        let uart = PhmUart { rx, tx };
+
         // Set up USB Serial Port
         let usb_bus = cx.local.usb_bus;
         usb_bus.replace(Usbd::new(UsbPeripheral::new(device.USBD, clocks)));
@@ -112,11 +131,7 @@ mod app {
 
         let (worker_comms, interface_comms) = comms.split();
 
-        let worker = Worker {
-            io: worker_comms,
-            i2c,
-            spi,
-        };
+        let worker = Worker::new(worker_comms, i2c, spi, uart);
 
         usb_tick::spawn().ok();
         (

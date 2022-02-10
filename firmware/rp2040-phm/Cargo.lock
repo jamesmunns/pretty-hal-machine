@@ -475,6 +475,7 @@ dependencies = [
  "defmt",
  "embedded-hal",
  "heapless",
+ "nb 1.0.0",
  "phm-icd",
 ]
 
@@ -673,6 +674,7 @@ dependencies = [
  "embedded-hal",
  "embedded-time",
  "heapless",
+ "nb 1.0.0",
  "panic-probe",
  "phm-icd",
  "phm-worker",
