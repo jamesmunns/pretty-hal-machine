@@ -35,7 +35,7 @@ mod app {
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
     type PhmI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
     type PhmSpi = Spi<spi::Enabled, SPI0, 8>;
-    type MyUart = UartPeripheral<UartEnabled, UART0>;
+    type PhmUart = UartPeripheral<UartEnabled, UART0>;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -46,7 +46,7 @@ mod app {
     #[local]
     struct Local {
         interface_comms: InterfaceComms<8>,
-        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, MyUart>,
+        worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus>,
         usb_dev: UsbDevice<'static, UsbBus>,
     }
