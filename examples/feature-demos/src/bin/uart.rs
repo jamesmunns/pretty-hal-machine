@@ -3,7 +3,7 @@ use phm::Machine;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), ()> {
-    println!("UART example!");
+    println!("UART demo!");
 
     let mut dport = None;
 

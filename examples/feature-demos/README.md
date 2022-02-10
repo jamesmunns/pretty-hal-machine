@@ -16,3 +16,21 @@ $ cargo run --bin i2c-oled
 $ cargo run --bin uart
 ```
 Continuously reading incoming bytes + transmitting data once a second. 
+
+
+
+## SPI
+
+``` console
+$ cargo run --bin spi
+```
+Performs an SPI transfer once a second.
+
+
+
+## I2C
+
+``` console
+$ cargo run --bin i2c
+```
+Writes data to I2C address `0x42` once a second.
