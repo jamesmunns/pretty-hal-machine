@@ -1,8 +1,13 @@
+use clap::Parser;
 use phm::Machine;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-fn main() -> Result<(), ()> {
-    println!("Hello, world!");
+use crate::cli::PhmCli;
+
+mod cli;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cmd = PhmCli::parse();
 
     let mut dport = None;
 
@@ -29,22 +34,9 @@ fn main() -> Result<(), ()> {
     let port = serialport::new(dport.port_name, 115200)
         .timeout(Duration::from_millis(5))
         .open()
-        .map_err(drop)?;
+        .map_err(|_| "Error: failed to create port")?;
 
     let mut ehal = Machine::from_port(port).unwrap();
 
-    let mut last_send = Instant::now();
-
-    loop {
-        if last_send.elapsed() >= Duration::from_secs(1) {
-            // println!("Sending I2C command!");
-            // embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
-
-            let mut buf = [1, 2, 3, 4];
-            println!("Sending SPI: {:?}", buf);
-            embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
-            println!("Received SPI: {:?}", buf);
-            last_send = Instant::now();
-        }
-    }
+    cmd.run(&mut ehal).map_err(|e| e.into())
 }

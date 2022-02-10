@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 embedded-hal = "0.2.6"
 serialport = "4.0.1"
+clap = { version = "3.0.14", features = ["derive"] }
 
 [dependencies.phm]
 path = "../phm"
 version = "0.0.1"
-
