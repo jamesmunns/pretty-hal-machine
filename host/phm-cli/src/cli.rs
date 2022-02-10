@@ -1,14 +1,17 @@
-use std::num::ParseIntError;
+use std::{num::ParseIntError, str::FromStr};
 
 use clap::{Args, Parser, Subcommand};
-use embedded_hal::prelude::{
-    _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
-    _embedded_hal_blocking_i2c_WriteRead,
-};
 use phm::Machine;
+
+#[derive(Debug)]
+struct Address(u8);
+
+#[derive(Debug)]
+struct WriteBytes(Vec<u8>);
 
 #[derive(Parser, Debug)]
 pub enum PhmCli {
+    /// Commands for I2C communication.
     I2C(I2C),
 }
 
@@ -35,17 +38,17 @@ enum I2CCommand {
 struct I2CWrite {
     /// The address to write to.
     #[clap(short = 'a')]
-    address: u8,
+    address: Address,
     /// Bytes to write to the address. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(short = 'b', long = "write")]
-    write_bytes: String,
+    write_bytes: WriteBytes,
 }
 
 #[derive(Args, Debug)]
 struct I2CRead {
     /// The address to write to.
     #[clap(short = 'a')]
-    address: u8,
+    address: Address,
     /// Number of bytes to read.
     #[clap(long = "read-ct")]
     read_count: usize,
@@ -53,11 +56,11 @@ struct I2CRead {
 
 #[derive(Args, Debug)]
 struct WriteRead {
-    /// The address to write to.
+    /// The address to write to. Should be given as a hex value. For example: "0xA4".
     #[clap(short = 'a')]
-    address: u8,
+    address: Address,
     #[clap(short = 'b', long = "bytes")]
-    write_bytes: String,
+    write_bytes: WriteBytes,
     /// Bytes to write to the address. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(long = "read-ct")]
     read_count: usize,
@@ -67,36 +70,53 @@ impl PhmCli {
     pub fn run(&self, machine: &mut Machine) -> Result<(), phm::Error> {
         match self {
             PhmCli::I2C(cmd) => match &cmd.command {
-                I2CCommand::I2CWrite(args) => {
-                    let bytes =
-                        parse_bytes(&args.write_bytes).map_err(|_| phm::Error::InvalidParameter)?;
-
-                    machine.write(args.address, &bytes)
-                }
+                I2CCommand::I2CWrite(args) => embedded_hal::blocking::i2c::Write::write(
+                    machine,
+                    args.address.0,
+                    &args.write_bytes.0,
+                ),
                 I2CCommand::I2CRead(args) => {
                     let mut buffer = vec![0u8; args.read_count];
 
-                    machine.read(args.address, &mut buffer)
+                    embedded_hal::blocking::i2c::Read::read(machine, args.address.0, &mut buffer)
                 }
                 I2CCommand::WriteRead(args) => {
-                    let bytes =
-                        parse_bytes(&args.write_bytes).map_err(|_| phm::Error::InvalidParameter)?;
                     let mut buffer = vec![0u8; args.read_count];
 
-                    machine.write_read(args.address, &bytes, &mut buffer)
+                    embedded_hal::blocking::i2c::WriteRead::write_read(
+                        machine,
+                        args.address.0,
+                        &args.write_bytes.0,
+                        &mut buffer,
+                    )
                 }
             },
         }
     }
 }
 
-fn parse_bytes(input: &str) -> Result<Vec<u8>, ParseIntError> {
-    let mut bytes: Vec<u8> = Vec::new();
-    for b in input.split(',') {
-        let without_prefix = b.trim_start_matches("0x");
-        let byte = u8::from_str_radix(without_prefix, 16)?;
-        bytes.push(byte);
-    }
+impl FromStr for WriteBytes {
+    type Err = ParseIntError;
 
-    Ok(bytes)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut bytes: Vec<u8> = Vec::new();
+        for b in s.split(',') {
+            let without_prefix = b.trim_start_matches("0x");
+            let byte = u8::from_str_radix(without_prefix, 16)?;
+            bytes.push(byte);
+        }
+
+        Ok(Self(bytes))
+    }
+}
+
+impl FromStr for Address {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let without_prefix = s.trim_start_matches("0x");
+        let byte = u8::from_str_radix(without_prefix, 16)?;
+
+        Ok(Self(byte))
+    }
 }
