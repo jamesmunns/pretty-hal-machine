@@ -1,5 +1,5 @@
 [package]
-name = "i2c-oled-example"
+name = "feature-demos"
 version = "0.0.1"
 edition = "2021"
 

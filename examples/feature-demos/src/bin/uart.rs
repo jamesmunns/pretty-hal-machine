@@ -1,13 +1,9 @@
-use core::fmt::Write;
+// $ cargo run --bin uart
 use phm::Machine;
 use std::time::{Duration, Instant};
 
-use ssd1306::{
-    prelude::*, rotation::DisplayRotation, size::DisplaySize128x64, I2CDisplayInterface, Ssd1306,
-};
-
 fn main() -> Result<(), ()> {
-    println!("Hello, world!");
+    println!("UART example!");
 
     let mut dport = None;
 
@@ -36,23 +32,23 @@ fn main() -> Result<(), ()> {
         .open()
         .map_err(drop)?;
 
-    let ehal = Machine::from_port(port).unwrap();
+    let mut ehal = Machine::from_port(port).unwrap();
 
-    // Configure the OLED display.
-    let interface = I2CDisplayInterface::new(ehal);
-    let mut disp =
-        Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_terminal_mode();
-    disp.init().ok();
-    disp.clear().ok();
-    disp.write_str("Hello world!\n").ok();
+    embedded_hal::blocking::serial::Write::<u8>::bflush(&mut ehal).unwrap();
 
     let mut last_send = Instant::now();
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
-            println!("Sending command!");
-            disp.write_str("PHM!\n").ok();
+            let str = "Pretty HAL machine!\n";
+            print!("TX: {}", str);
+            embedded_hal::blocking::serial::Write::<u8>::bwrite_all(&mut ehal, str.as_bytes())
+                .unwrap();
+
             last_send = Instant::now();
+        }
+        while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
+            println!("RX: {:x}", b);
         }
     }
 }
