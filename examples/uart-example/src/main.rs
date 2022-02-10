@@ -2,7 +2,7 @@ use phm::Machine;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), ()> {
-    println!("Hello, world!");
+    println!("Uart example");
 
     let mut dport = None;
 
@@ -39,14 +39,6 @@ fn main() -> Result<(), ()> {
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
-            // println!("Sending I2C command!");
-            // embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
-
-            // let mut buf = [1, 2, 3, 4];
-            // println!("Sending SPI: {:?}", buf);
-            // embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
-            // println!("Received SPI: {:?}", buf);
-
             let str = "Pretty HAL machine!\n";
             print!("TX: {}", str);
             embedded_hal::blocking::serial::Write::<u8>::bwrite_all(&mut ehal, str.as_bytes())
