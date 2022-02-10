@@ -183,16 +183,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "feature-demos"
-version = "0.0.1"
-dependencies = [
- "embedded-hal",
- "phm",
- "serialport",
- "ssd1306",
-]
-
-[[package]]
 name = "hash32"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -212,6 +202,16 @@ dependencies = [
  "serde",
  "spin",
  "stable_deref_trait",
+]
+
+[[package]]
+name = "i2c-oled-example"
+version = "0.0.2"
+dependencies = [
+ "embedded-hal",
+ "phm",
+ "serialport",
+ "ssd1306",
 ]
 
 [[package]]
@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "phm"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "embedded-hal",
  "heapless",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "phm-icd"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "heapless",
  "serde",
