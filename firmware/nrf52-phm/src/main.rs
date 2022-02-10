@@ -50,6 +50,8 @@ mod app {
         usb_bus: Option<UsbBusAllocator<Usbd<UsbPeripheral<'static>>>> = None,
         incoming: Queue<ToMcu, 8> = Queue::new(),
         outgoing: Queue<Result<ToPc, ()>, 8> = Queue::new(),
+        uart_rx_buf: [u8; 64] = [0; 64],
+        uart_tx_buf: [u8; 1] = [0],
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let device = cx.device;
@@ -102,12 +104,11 @@ mod app {
             cts: None,
             rts: None,
         };
-        let uart = PhmUart(Uarte::new(
-            device.UARTE0,
-            pins,
-            Parity::EXCLUDED,
-            Baudrate::BAUD9600,
-        ));
+        let uarte = Uarte::new(device.UARTE0, pins, Parity::EXCLUDED, Baudrate::BAUD9600);
+        let (tx, rx) = uarte
+            .split(cx.local.uart_rx_buf, cx.local.uart_tx_buf)
+            .unwrap();
+        let uart = PhmUart { rx, tx };
 
         // Set up USB Serial Port
         let usb_bus = cx.local.usb_bus;

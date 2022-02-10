@@ -1,29 +1,30 @@
-use nrf52840_hal::{pac::UARTE0, uarte::Uarte};
+use nrf52840_hal::{
+    pac::UARTE0,
+    uarte::{UarteRx, UarteTx},
+};
 
-pub struct PhmUart(pub Uarte<UARTE0>);
-
-impl embedded_hal::blocking::serial::Write<u8> for PhmUart {
-    type Error = ();
-
-    fn bwrite_all(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.0.write(bytes).map_err(drop)?;
-        Ok(())
-    }
-
-    fn bflush(&mut self) -> Result<(), Self::Error> {
-        // TODO
-        Ok(())
-    }
+pub struct PhmUart {
+    pub rx: UarteRx<UARTE0>,
+    pub tx: UarteTx<UARTE0>,
 }
 
 impl embedded_hal::serial::Read<u8> for PhmUart {
     type Error = ();
 
     fn read(&mut self) -> Result<u8, nb::Error<Self::Error>> {
-        let mut buf = [0_u8];
-        match self.0.read(&mut buf) {
-            Ok(_) => Ok(buf[0]),
-            _ => Err(nb::Error::WouldBlock),
-        }
+        embedded_hal::serial::Read::<u8>::read(&mut self.rx).map_err(|_| nb::Error::WouldBlock)
+    }
+}
+
+impl embedded_hal::serial::Write<u8> for PhmUart {
+    type Error = ();
+
+    fn write(&mut self, output: u8) -> Result<(), nb::Error<Self::Error>> {
+        embedded_hal::serial::Write::<u8>::write(&mut self.tx, output)
+            .map_err(|_| nb::Error::WouldBlock)
+    }
+
+    fn flush(&mut self) -> Result<(), nb::Error<Self::Error>> {
+        embedded_hal::serial::Write::<u8>::flush(&mut self.tx).map_err(|_| nb::Error::WouldBlock)
     }
 }

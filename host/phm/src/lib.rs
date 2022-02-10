@@ -328,10 +328,23 @@ impl embedded_hal::blocking::serial::Write<u8> for Machine {
     }
 }
 
+impl embedded_hal::serial::Write<u8> for Machine {
+    type Error = Error;
+
+    fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
+        embedded_hal::blocking::serial::Write::<u8>::bwrite_all(self, &[byte])
+            .map_err(|_| nb::Error::WouldBlock)
+    }
+
+    fn flush(&mut self) -> nb::Result<(), Self::Error> {
+        embedded_hal::blocking::serial::Write::<u8>::bflush(self).map_err(|_| nb::Error::WouldBlock)
+    }
+}
+
 impl embedded_hal::serial::Read<u8> for Machine {
     type Error = Error;
 
-    fn read(&mut self) -> Result<u8, nb::Error<Error>> {
+    fn read(&mut self) -> nb::Result<u8, Self::Error> {
         if !self.uart_rx_buf.is_empty() {
             Ok(self.uart_rx_buf.pop_front().unwrap())
         } else {

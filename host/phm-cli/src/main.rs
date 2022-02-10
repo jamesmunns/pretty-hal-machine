@@ -52,11 +52,10 @@ fn main() -> Result<(), ()> {
             embedded_hal::blocking::serial::Write::<u8>::bwrite_all(&mut ehal, str.as_bytes())
                 .unwrap();
 
-            while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
-                println!("UART RX: {:x}", b);
-            }
-
             last_send = Instant::now();
+        }
+        while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
+            println!("UART RX: {:x}", b);
         }
     }
 }

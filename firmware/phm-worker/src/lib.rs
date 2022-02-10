@@ -5,8 +5,8 @@
 
 #![no_std]
 
-use embedded_hal::blocking::{i2c, serial, spi};
-use embedded_hal::serial::Read as SerialRead;
+use embedded_hal::blocking::{i2c, spi};
+use embedded_hal::serial;
 use phm_icd::{
     Error as IcdError, ToMcu, ToMcuI2c, ToMcuSpi, ToMcuUart, ToPc, ToPcI2c, ToPcSpi, ToPcUart,
 };
@@ -101,7 +101,7 @@ where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
     SPI: spi::Write<u8> + spi::Transfer<u8>,
-    UART: serial::Write<u8> + SerialRead<u8>,
+    UART: serial::Write<u8> + serial::Read<u8>,
 {
     pub io: IO,
     pub i2c: I2C,
@@ -115,7 +115,7 @@ where
     IO: WorkerIo,
     I2C: i2c::Write + i2c::Read + i2c::WriteRead,
     SPI: spi::Write<u8> + spi::Transfer<u8>,
-    UART: serial::Write<u8> + SerialRead<u8>,
+    UART: serial::Write<u8> + serial::Read<u8>,
 {
     pub fn new(io: IO, i2c: I2C, spi: SPI, uart: UART) -> Self {
         Worker {
@@ -128,7 +128,7 @@ where
     }
     /// Process any pending messages to the worker
     pub fn step(&mut self) -> Result<(), Error> {
-        while let Ok(data_read) = SerialRead::read(&mut self.uart) {
+        while let Ok(data_read) = serial::Read::<u8>::read(&mut self.uart) {
             self.uart_rx.push_back(data_read).ok();
         }
         while let Some(data) = self.io.receive() {
@@ -225,15 +225,16 @@ where
     fn process_uart(&mut self, uart_cmd: ToMcuUart) -> Result<ToPc, Error> {
         match uart_cmd {
             ToMcuUart::Write { output } => {
-                match serial::Write::<u8>::bwrite_all(&mut self.uart, output.as_slice()) {
-                    Ok(_) => Ok(ToPc::Uart(ToPcUart::WriteComplete)),
-                    Err(_) => Err(Error::Uart),
+                for &b in output.iter() {
+                    nb::block!(serial::Write::<u8>::write(&mut self.uart, b))
+                        .map_err(|_| Error::Uart)?;
                 }
+                Ok(ToPc::Uart(ToPcUart::WriteComplete))
             }
-            ToMcuUart::Flush => match serial::Write::<u8>::bflush(&mut self.uart) {
-                Ok(_) => Ok(ToPc::Uart(ToPcUart::WriteComplete)),
-                Err(_) => Err(Error::Uart),
-            },
+            ToMcuUart::Flush => {
+                nb::block!(serial::Write::<u8>::flush(&mut self.uart)).map_err(|_| Error::Uart)?;
+                Ok(ToPc::Uart(ToPcUart::WriteComplete))
+            }
             ToMcuUart::Read => {
                 let response = ToPc::Uart(ToPcUart::Read {
                     data_read: self.uart_rx.clone().into_iter().collect(),

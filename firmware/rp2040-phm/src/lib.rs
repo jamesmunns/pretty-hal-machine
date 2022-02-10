@@ -1,7 +1,5 @@
 #![no_std]
 
-pub mod uart;
-
 use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_rtt as _;
 use panic_probe as _;
