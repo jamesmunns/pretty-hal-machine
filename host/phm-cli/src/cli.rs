@@ -15,6 +15,8 @@ pub enum PhmCli {
     I2C(I2C),
     /// Commands for SPI communication.
     Spi(Spi),
+    /// Commands for SPI communication.
+    Uart(Uart),
 }
 
 #[derive(Parser, Debug)]
@@ -27,6 +29,12 @@ pub struct I2C {
 pub struct Spi {
     #[clap(subcommand)]
     command: SpiCommand,
+}
+
+#[derive(Parser, Debug)]
+pub struct Uart {
+    #[clap(subcommand)]
+    command: UartCommand,
 }
 
 #[derive(Subcommand, Debug)]
@@ -56,6 +64,19 @@ enum SpiCommand {
     /// SPI Transfer console mode
     #[clap(name = "console")]
     SpiConsole,
+}
+
+#[derive(Subcommand, Debug)]
+enum UartCommand {
+    /// Write bytes over UART
+    #[clap(name = "write")]
+    UartWrite(UartWrite),
+    /// UART Write console mode
+    #[clap(name = "console")]
+    UartConsole,
+    /// UART Read console
+    #[clap(name = "listen")]
+    UartListen,
 }
 
 #[derive(Args, Debug)]
@@ -107,6 +128,13 @@ struct SpiWrite {
 #[derive(Args, Debug)]
 struct SpiTransfer {
     /// Bytes to transfer over SPI. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
+    #[clap(short = 'b', long = "write")]
+    write_bytes: WriteBytes,
+}
+
+#[derive(Args, Debug)]
+struct UartWrite {
+    /// Bytes to write over UART. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(short = 'b', long = "write")]
     write_bytes: WriteBytes,
 }
@@ -171,6 +199,32 @@ impl PhmCli {
                             Ok(bytes) => println!("{:02x?}", &bytes),
                             Err(err) => eprintln!("{:?}", err),
                         }
+                    }
+                }
+            },
+            PhmCli::Uart(cmd) => match &cmd.command {
+                UartCommand::UartWrite(args) => {
+                    embedded_hal::blocking::serial::Write::bwrite_all(machine, &args.write_bytes.0)
+                        .map(|_| "".into())
+                }
+                UartCommand::UartConsole => {
+                    println!("UART TX console\nProvide a comma separated list of bytes (hex) then press enter to execute:");
+                    loop {
+                        let mut buffer = String::new();
+                        std::io::stdin().read_line(&mut buffer).unwrap();
+                        let bytes = WriteBytes::from_str(&buffer.trim()).unwrap().0;
+                        embedded_hal::blocking::serial::Write::bwrite_all(machine, &bytes)?;
+                    }
+                }
+                UartCommand::UartListen => {
+                    use std::io::Write;
+                    println!("UART RX console");
+                    loop {
+                        while let Ok(b) = embedded_hal::serial::Read::<u8>::read(machine) {
+                            print!("{:02x} ", b);
+                        }
+                        std::io::stdout().flush().unwrap();
+                        std::thread::sleep(std::time::Duration::from_millis(10));
                     }
                 }
             },

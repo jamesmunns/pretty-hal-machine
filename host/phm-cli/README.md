@@ -162,3 +162,45 @@ OPTIONS:
                                  list of hex values. For example: "0xA0,0xAB,0x11"
     -h, --help                   Print help information
 ```
+
+### UART RX console mode (`phm-cli uart listen`)
+
+```
+phm-cli-uart-listen
+Read incoming bytes over UART.
+
+USAGE:
+    phm-cli uart listen
+
+OPTIONS:
+    -h, --help    Print help information
+```
+
+### UART TX console mode (`phm-cli uart console`)
+
+```
+phm-cli-uart-console
+Write bytes over UART.
+Provide a comma separated list of bytes (hex) then press enter to execute.
+
+USAGE:
+    phm-cli uart console
+
+OPTIONS:
+    -h, --help    Print help information
+```
+
+### UART Write (`phm-cli uart write`)
+
+```
+phm-cli-uart-write
+Write bytes over UART
+
+USAGE:
+    phm-cli uart write --write <WRITE_BYTES>
+
+OPTIONS:
+    -b, --write <WRITE_BYTES>    Bytes to write to UART. Should be given as a comma-separated
+                                 list of hex values. For example: "0xA0,0xAB,0x11"
+    -h, --help                   Print help information
+```
