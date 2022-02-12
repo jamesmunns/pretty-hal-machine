@@ -1,3 +1,4 @@
+// $ cargo run --bin i2c-oled
 use core::fmt::Write;
 use phm::Machine;
 use std::time::{Duration, Instant};
@@ -7,7 +8,7 @@ use ssd1306::{
 };
 
 fn main() -> Result<(), ()> {
-    println!("Hello, world!");
+    println!("I2C OLED display driver demo!");
 
     let mut dport = None;
 

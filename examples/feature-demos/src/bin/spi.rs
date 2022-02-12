@@ -1,8 +1,9 @@
+// $ cargo run --bin spi
 use phm::Machine;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), ()> {
-    println!("Uart example");
+    println!("SPI transfer demo!");
 
     let mut dport = None;
 
@@ -33,21 +34,18 @@ fn main() -> Result<(), ()> {
 
     let mut ehal = Machine::from_port(port).unwrap();
 
-    embedded_hal::blocking::serial::Write::<u8>::bflush(&mut ehal).unwrap();
-
     let mut last_send = Instant::now();
 
     loop {
         if last_send.elapsed() >= Duration::from_secs(1) {
-            let str = "Pretty HAL machine!\n";
-            print!("TX: {}", str);
-            embedded_hal::blocking::serial::Write::<u8>::bwrite_all(&mut ehal, str.as_bytes())
-                .unwrap();
+            // println!("Sending I2C command!");
+            // embedded_hal::blocking::i2c::Write::write(&mut ehal, 0x42, &[1, 2, 3, 4]).unwrap();
 
+            let mut buf = [1, 2, 3, 4];
+            println!("Sending SPI: {:?}", buf);
+            embedded_hal::blocking::spi::Transfer::transfer(&mut ehal, &mut buf).unwrap();
+            println!("Received SPI: {:?}", buf);
             last_send = Instant::now();
-        }
-        while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
-            println!("RX: {:x}", b);
         }
     }
 }
