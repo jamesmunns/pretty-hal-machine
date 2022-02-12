@@ -4,7 +4,7 @@ Changes will be described here.
 
 ## Unreleased
 
-...
+* Added SPI commands to CLI [`#24`](https://github.com/jamesmunns/pretty-hal-machine/pull/20).
 
 ## 0.0.2
 

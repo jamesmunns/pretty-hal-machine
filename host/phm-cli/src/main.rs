@@ -38,5 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut ehal = Machine::from_port(port).unwrap();
 
-    cmd.run(&mut ehal).map_err(|e| e.into())
+    match cmd.run(&mut ehal) {
+        Ok(out) => {
+            println!("{out}");
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
 }
