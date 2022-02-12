@@ -30,9 +30,25 @@ OPTIONS:
 
 SUBCOMMANDS:
     help          Print this message or the help of the given subcommand(s)
+    console       I2C Write console mode
     read          Read count bytes from the given address
     write         Write bytes to the given address
     write-read    Write-Read bytes to and from the given address
+```
+
+### I2C Write console mode (`phm-cli i2c console`)
+
+```
+phm-cli-i2c-console
+Write bytes over I2C.
+Provide a comma separated list of bytes (hex) then press enter to execute.
+
+USAGE:
+    phm-cli i2c console -a <ADDRESS>
+
+OPTIONS:
+    -a <ADDRESS>                  The address to write to
+    -h, --help                    Print help information
 ```
 
 ### I2C Read (`phm-cli i2c read`)
@@ -47,7 +63,7 @@ USAGE:
 OPTIONS:
     -a <ADDRESS>                  The address to write to
     -h, --help                    Print help information
-        --read-ct <READ_COUNT>    Number of bytes to read
+    --read-ct <READ_COUNT>        Number of bytes to read
 ```
 
 ### I2C Write (`phm-cli i2c write`)
@@ -98,23 +114,23 @@ OPTIONS:
 
 SUBCOMMANDS:
     help          Print this message or the help of the given subcommand(s)
-    write         Write bytes over SPI
+    console       SPI Transfer console mode
     transfer      Write and read bytes over SPI
+    write         Write bytes over SPI
 ```
 
-### SPI Write (`phm-cli spi write`)
+### SPI Transfer console mode (`phm-cli spi console`)
 
 ```
-phm-cli-spi-write
-Write bytes over SPI
+phm-cli-spi-console
+Write and read bytes over SPI.
+Provide a comma separated list of bytes (hex) then press enter to execute.
 
 USAGE:
-    phm-cli spi write --write <WRITE_BYTES>
+    phm-cli spi console
 
 OPTIONS:
-    -b, --write <WRITE_BYTES>    Bytes to write to SPI. Should be given as a comma-separated
-                                 list of hex values. For example: "0xA0,0xAB,0x11"
-    -h, --help                   Print help information
+    -h, --help    Print help information
 ```
 
 ### SPI Transfer (`phm-cli spi transfer`)
@@ -125,6 +141,21 @@ Write and read bytes over SPI
 
 USAGE:
     phm-cli spi transfer --write <WRITE_BYTES>
+
+OPTIONS:
+    -b, --write <WRITE_BYTES>    Bytes to write to SPI. Should be given as a comma-separated
+                                 list of hex values. For example: "0xA0,0xAB,0x11"
+    -h, --help                   Print help information
+```
+
+### SPI Write (`phm-cli spi write`)
+
+```
+phm-cli-spi-write
+Write bytes over SPI
+
+USAGE:
+    phm-cli spi write --write <WRITE_BYTES>
 
 OPTIONS:
     -b, --write <WRITE_BYTES>    Bytes to write to SPI. Should be given as a comma-separated

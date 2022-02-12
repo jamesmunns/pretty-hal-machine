@@ -40,16 +40,22 @@ enum I2CCommand {
     /// Write-Read bytes to and from the given address
     #[clap(name = "write-read")]
     WriteRead(WriteRead),
+    /// I2C Write console mode
+    #[clap(name = "console")]
+    I2CConsole(I2CConsole),
 }
 
 #[derive(Subcommand, Debug)]
 enum SpiCommand {
-    /// Write bytes
+    /// Write bytes over SPI
     #[clap(name = "write")]
     SpiWrite(SpiWrite),
-    /// Transfer bytes
+    /// Transfer bytes over SPI
     #[clap(name = "transfer")]
     SpiTransfer(SpiTransfer),
+    /// SPI Transfer console mode
+    #[clap(name = "console")]
+    SpiConsole,
 }
 
 #[derive(Args, Debug)]
@@ -82,6 +88,13 @@ struct WriteRead {
     /// Bytes to write to the address. Should be given as a comma-separated list of hex values. For example: "0xA0,0xAB,0x11".
     #[clap(long = "read-ct")]
     read_count: usize,
+}
+
+#[derive(Args, Debug)]
+struct I2CConsole {
+    /// The address to write to. Should be given as a hex value. For example: "0xA4".
+    #[clap(short = 'a')]
+    address: Address,
 }
 
 #[derive(Args, Debug)]
@@ -123,6 +136,20 @@ impl PhmCli {
                     )?;
                     Ok(format!("{:02x?}", &buffer))
                 }
+                I2CCommand::I2CConsole(args) => {
+                    println!("I2C Write console (address: 0x{:02x})", args.address.0);
+                    println!("Provide a comma separated list of bytes (hex) then press enter to execute:");
+                    loop {
+                        let mut buffer = String::new();
+                        std::io::stdin().read_line(&mut buffer).unwrap();
+                        let mut bytes = WriteBytes::from_str(&buffer.trim()).unwrap().0;
+                        embedded_hal::blocking::i2c::Write::write(
+                            machine,
+                            args.address.0,
+                            &mut bytes,
+                        )?;
+                    }
+                }
             },
             PhmCli::Spi(cmd) => match &cmd.command {
                 SpiCommand::SpiWrite(args) => {
@@ -133,6 +160,18 @@ impl PhmCli {
                     let mut buffer = args.write_bytes.0.clone();
                     embedded_hal::blocking::spi::Transfer::transfer(machine, &mut buffer)
                         .map(|bytes| format!("{:02x?}", &bytes))
+                }
+                SpiCommand::SpiConsole => {
+                    println!("SPI Transfer console\nProvide a comma separated list of bytes (hex) then press enter to execute:");
+                    loop {
+                        let mut buffer = String::new();
+                        std::io::stdin().read_line(&mut buffer).unwrap();
+                        let mut bytes = WriteBytes::from_str(&buffer.trim()).unwrap().0;
+                        match embedded_hal::blocking::spi::Transfer::transfer(machine, &mut bytes) {
+                            Ok(bytes) => println!("{:02x?}", &bytes),
+                            Err(err) => eprintln!("{:?}", err),
+                        }
+                    }
                 }
             },
         }
@@ -145,7 +184,7 @@ impl FromStr for WriteBytes {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut bytes: Vec<u8> = Vec::new();
         for b in s.split(',') {
-            let without_prefix = b.trim_start_matches("0x");
+            let without_prefix = b.trim().trim_start_matches("0x");
             let byte = u8::from_str_radix(without_prefix, 16)?;
             bytes.push(byte);
         }
