@@ -5,6 +5,7 @@ use blackpill_phm as _; // global logger + panicking-behavior + memory layout
 
 #[rtic::app(device = stm32f4xx_hal::pac, dispatchers = [USART1])]
 mod app {
+    use blackpill_phm::i2c::*;
     use defmt::unwrap;
     use heapless::spsc::Queue;
     use phm_icd::{ToMcu, ToPc};
@@ -16,7 +17,7 @@ mod app {
     use stm32f4xx_hal::{
         gpio::{
             gpioa::{PA2, PA3, PA5, PA6, PA7},
-            gpiob::{PB8, PB9},
+            gpiob::{PB10, PB3, PB8, PB9},
             Alternate, OpenDrain, PushPull,
         },
         i2c::I2c,
@@ -46,6 +47,8 @@ mod app {
         ),
         TransferModeNormal,
     >;
+    type I2cPeri =
+        I2CPeripheralEventIterator<(PB10<Alternate<OpenDrain, 4>>, PB3<Alternate<OpenDrain, 9>>)>;
 
     #[monotonic(binds = TIM2, default = true)]
     type Monotonic = MonoTimer<stm32f4xx_hal::pac::TIM2, 1_000_000>;
@@ -59,6 +62,7 @@ mod app {
         worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus<USB>>,
         usb_dev: UsbDevice<'static, UsbBus<USB>>,
+        i2c: I2cPeri,
     }
 
     #[init(local = [
@@ -80,11 +84,17 @@ mod app {
         // Create GPIO ports for pin-mapping
         let gpioa = device.GPIOA.split();
         let gpiob = device.GPIOB.split();
+        let gpioc = device.GPIOC.split();
 
         // Set up I2C
         let scl = gpiob.pb8.into_alternate_open_drain();
         let sda = gpiob.pb9.into_alternate_open_drain();
         let i2c = I2c::new(device.I2C1, (scl, sda), 400.khz(), &clocks);
+
+        // Set up I2C
+        let scl2 = gpiob.pb10.into_alternate_open_drain();
+        let sda2 = gpiob.pb3.into_alternate_open_drain();
+        let i2c2 = I2CP::new_peripheral_event_iterator(device.I2C2, (scl2, sda2), 0x55);
 
         // Set up SPI
         let sck = gpioa.pa5.into_alternate();
@@ -153,6 +163,7 @@ mod app {
                 interface_comms,
                 usb_serial,
                 usb_dev,
+                i2c: i2c2,
             },
             init::Monotonics(mono),
         )
@@ -201,12 +212,40 @@ mod app {
         usb_tick::spawn_after(1.millis()).ok();
     }
 
-    #[idle(local = [worker])]
+    #[idle(local = [i2c, worker])]
     fn idle(cx: idle::Context) -> ! {
         defmt::println!("Hello, world!");
         let worker = cx.local.worker;
-
+        let i2c = cx.local.i2c;
         loop {
+            if let Some(evt) = i2c.next() {
+                match evt {
+                    I2CEvent::Start => {
+                        defmt::info!("Start");
+                    }
+                    I2CEvent::TransferRead => {
+                        defmt::info!("TransferRead");
+                        i2c.write(&[1, 2, 3, 4]);
+                    }
+                    I2CEvent::TransferWrite => {
+                        defmt::info!("TransferWrite");
+                        let mut buf = [0_u8; 16];
+                        loop {
+                            let read = i2c.read(&mut buf);
+                            if read == 0 {
+                                break;
+                            }
+                            defmt::info!("I2C RX: {:x}", buf[..read]);
+                        }
+                    }
+                    I2CEvent::Stop => {
+                        defmt::info!("Stop");
+                    }
+                    I2CEvent::Restart => {
+                        defmt::info!("Restart");
+                    }
+                }
+            }
             unwrap!(worker.step().map_err(drop));
         }
     }

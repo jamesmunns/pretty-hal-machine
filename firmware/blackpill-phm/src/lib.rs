@@ -1,6 +1,7 @@
 #![no_std]
 
 use core::sync::atomic::{AtomicUsize, Ordering};
+pub mod i2c;
 
 use defmt_rtt as _; // global logger
 use panic_probe as _;
