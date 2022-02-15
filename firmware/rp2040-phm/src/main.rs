@@ -3,7 +3,7 @@
 
 use rp2040_phm as _; // global logger + panicking-behavior + memory layout
 
-#[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
+#[rtic::app(device = rp_pico::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use defmt::unwrap;
     use embedded_time::rate::Extensions;
@@ -14,28 +14,34 @@ mod app {
         Worker,
     };
     use postcard::{to_vec_cobs, CobsAccumulator, FeedResult};
-    use rp2040_monotonic::*;
+    use rp2040_phm::monotonic::{ExtU64, Rp2040Monotonic};
+    // use rp2040_monotonic::*;
     use rp_pico::{
         hal::{
             clocks::init_clocks_and_plls,
             gpio::pin::{
-                bank0::{Gpio16, Gpio17},
+                bank0::{Gpio0, Gpio1, Gpio16, Gpio17, Gpio6, Gpio7},
                 FunctionI2C, FunctionSpi, FunctionUart, Pin,
             },
+            i2c::peripheral::{I2CEvent, I2CPeripheralEventIterator},
             spi::{self, Spi},
             uart::{common_configs as UartConfig, Enabled as UartEnabled, UartPeripheral},
             usb::UsbBus,
             watchdog::Watchdog,
             Clock, Sio, I2C,
         },
-        pac::{I2C0, SPI0, UART0},
+        pac::{I2C0, I2C1, SPI0, UART0},
         XOSC_CRYSTAL_FREQ,
     };
     use usb_device::{class_prelude::*, prelude::*};
     use usbd_serial::{SerialPort, USB_CLASS_CDC};
     type PhmI2c = I2C<I2C0, (Pin<Gpio16, FunctionI2C>, Pin<Gpio17, FunctionI2C>)>;
     type PhmSpi = Spi<spi::Enabled, SPI0, 8>;
-    type PhmUart = UartPeripheral<UartEnabled, UART0>;
+    type PhmUart =
+        UartPeripheral<UartEnabled, UART0, (Pin<Gpio0, FunctionUart>, Pin<Gpio1, FunctionUart>)>;
+    type I2cPeri =
+        I2CPeripheralEventIterator<I2C1, (Pin<Gpio6, FunctionI2C>, Pin<Gpio7, FunctionI2C>)>;
+    const ADDRESS: u16 = 0x55;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;
@@ -49,6 +55,7 @@ mod app {
         worker: Worker<WorkerComms<8>, PhmI2c, PhmSpi, PhmUart>,
         usb_serial: SerialPort<'static, UsbBus>,
         usb_dev: UsbDevice<'static, UsbBus>,
+        i2c: I2cPeri,
     }
 
     #[init(local = [
@@ -57,6 +64,7 @@ mod app {
         outgoing: Queue<Result<ToPc, ()>, 8> = Queue::new(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
+        defmt::info!("{:x}", ADDRESS);
         let device = cx.device;
 
         // Setup clocks
@@ -92,7 +100,7 @@ mod app {
         // Set up the I2C pins and driver
         let sda_pin = pins.gpio16.into_mode::<FunctionI2C>();
         let scl_pin = pins.gpio17.into_mode::<FunctionI2C>();
-        let i2c = I2C::i2c0(
+        let i2c0 = I2C::i2c0(
             device.I2C0,
             sda_pin,
             scl_pin,
@@ -113,9 +121,9 @@ mod app {
         );
 
         // Set up UART
-        let _tx_pin = pins.gpio0.into_mode::<FunctionUart>();
-        let _rx_pin = pins.gpio1.into_mode::<FunctionUart>();
-        let uart = UartPeripheral::new(device.UART0, &mut resets)
+        let tx_pin = pins.gpio0.into_mode::<FunctionUart>();
+        let rx_pin = pins.gpio1.into_mode::<FunctionUart>();
+        let uart = UartPeripheral::new(device.UART0, (tx_pin, rx_pin), &mut resets)
             .enable(UartConfig::_9600_8_N_1, pclk_freq)
             .unwrap();
 
@@ -146,7 +154,15 @@ mod app {
 
         let (worker_comms, interface_comms) = comms.split();
 
-        let worker = Worker::new(worker_comms, i2c, spi, uart);
+        let worker = Worker::new(worker_comms, i2c0, spi, uart);
+
+        let i2c1 = I2C::new_peripheral_event_iterator(
+            device.I2C1,
+            pins.gpio6.into_mode(),
+            pins.gpio7.into_mode(),
+            &mut resets,
+            ADDRESS,
+        );
 
         usb_tick::spawn().ok();
         (
@@ -156,6 +172,7 @@ mod app {
                 interface_comms,
                 usb_serial,
                 usb_dev,
+                i2c: i2c1,
             },
             init::Monotonics(mono),
         )
@@ -204,12 +221,41 @@ mod app {
         usb_tick::spawn_after(1.millis()).ok();
     }
 
-    #[idle(local = [worker])]
+    #[idle(local = [i2c, worker])]
     fn idle(cx: idle::Context) -> ! {
         defmt::println!("Hello, world!");
         let worker = cx.local.worker;
-
+        let i2c = cx.local.i2c;
         loop {
+            if let Some(evt) = i2c.next() {
+                match evt {
+                    I2CEvent::Start => {
+                        defmt::info!("Start");
+                    }
+                    I2CEvent::TransferRead => {
+                        defmt::info!("TransferRead");
+                        i2c.write(&[1, 2, 3, 4]);
+                    }
+                    I2CEvent::TransferWrite => {
+                        defmt::info!("TransferWrite");
+                        let mut buf = [0_u8; 16];
+                        loop {
+                            let read = i2c.read(&mut buf);
+                            if read == 0 {
+                                break;
+                            }
+                            defmt::info!("I2C RX: {:x}", buf[..read]);
+                        }
+                    }
+                    I2CEvent::Stop => {
+                        defmt::info!("Stop");
+                    }
+                    I2CEvent::Restart => {
+                        defmt::info!("Restart");
+                    }
+                }
+            }
+
             unwrap!(worker.step().map_err(drop));
         }
     }

@@ -18,7 +18,7 @@ fn main() -> Result<(), ()> {
             ..
         }) = &port.port_type
         {
-            if sn.as_str() == "ajm123" {
+            if sn.as_str().to_lowercase() == "ajm123" {
                 dport = Some(port.clone());
                 break;
             }
