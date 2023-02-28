@@ -4,7 +4,8 @@ Changes will be described here.
 
 ## Unreleased
 
-* Added SPI commands to CLI [`#24`](https://github.com/jamesmunns/pretty-hal-machine/pull/20).
+* Added `console` modes to CLI for I2C, SPI and UART and `listen` for UART [`#25`](https://github.com/jamesmunns/pretty-hal-machine/pull/25).
+* Added SPI commands to CLI [`#24`](https://github.com/jamesmunns/pretty-hal-machine/pull/24).
 * Collected basic feature demos into a common project [`#22`](https://github.com/jamesmunns/pretty-hal-machine/pull/22).
 
 ## 0.0.2

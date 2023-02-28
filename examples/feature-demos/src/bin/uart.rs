@@ -1,5 +1,6 @@
 // $ cargo run --bin uart
 use phm::Machine;
+use std::io::Write;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), ()> {
@@ -48,7 +49,8 @@ fn main() -> Result<(), ()> {
             last_send = Instant::now();
         }
         while let Ok(b) = embedded_hal::serial::Read::<u8>::read(&mut ehal) {
-            println!("RX: {:x}", b);
+            print!("{:02x} ", b);
         }
+        std::io::stdout().flush().unwrap();
     }
 }
